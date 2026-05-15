@@ -24,11 +24,14 @@ type Dict = {
   active: string;
   noBaseUrl: string;
   switchKey: string;
+  switchAndRestart: string;
   edit: string;
   delete: string;
   log: string;
   savedKey: string;
   deletedKey: string;
+  restartRecommended: string;
+  restartedTool: string;
 };
 
 export const dictionaries: Record<Locale, Dict> = {
@@ -56,11 +59,14 @@ export const dictionaries: Record<Locale, Dict> = {
     active: "激活",
     noBaseUrl: "(无 Base URL)",
     switchKey: "切换",
+    switchAndRestart: "切换并重启",
     edit: "编辑",
     delete: "删除",
     log: "日志",
     savedKey: "已保存 Key",
-    deletedKey: "已删除 Key"
+    deletedKey: "已删除 Key",
+    restartRecommended: "检测到工具正在运行，建议重启",
+    restartedTool: "已执行重启指令"
   },
   "en-US": {
     appTitle: "Keypilot MVP Console",
@@ -86,11 +92,14 @@ export const dictionaries: Record<Locale, Dict> = {
     active: "active",
     noBaseUrl: "(No Base URL)",
     switchKey: "Switch",
+    switchAndRestart: "Switch + Restart",
     edit: "Edit",
     delete: "Delete",
     log: "Log",
     savedKey: "Saved key",
-    deletedKey: "Deleted key"
+    deletedKey: "Deleted key",
+    restartRecommended: "Tool is running, restart is recommended",
+    restartedTool: "Restart command has been executed"
   }
 };
 

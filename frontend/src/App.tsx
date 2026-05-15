@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { backupConfig, deleteKey, detectTools, listKeys, saveKey, switchKey } from "./api";
+import { backupConfig, deleteKey, detectTools, listKeys, restartTool, saveKey, switchKey } from "./api";
 import { dictionaries, resolveLocale, type Locale } from "./i18n";
 import type { KeyRecord, ToolStatus, ToolType } from "./types";
 
@@ -66,6 +66,20 @@ function App() {
     await saveKey(payload);
     setLog(`${t.savedKey}: ${payload.name}`);
     setDraft(emptyDraft);
+    await reload();
+  };
+
+  const handleSwitch = async (key: KeyRecord, withRestart: boolean) => {
+    const result = await switchKey(key.id);
+    let nextLog = result.message;
+    if (result.requiresRestart) {
+      nextLog = `${nextLog} | ${t.restartRecommended}`;
+      if (withRestart) {
+        const restartMessage = await restartTool(key.tool);
+        nextLog = `${nextLog} | ${t.restartedTool}: ${restartMessage}`;
+      }
+    }
+    setLog(nextLog);
     await reload();
   };
 
@@ -154,13 +168,15 @@ function App() {
             <div>{key.baseUrl || t.noBaseUrl}</div>
             <div className="row">
               <button
-                onClick={async () => {
-                  const result = await switchKey(key.id);
-                  setLog(result.message);
-                  await reload();
-                }}
+                onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}
               >
                 {t.switchKey}
+              </button>
+              <button
+                className="secondary"
+                onClick={() => handleSwitch(key, true).catch((err) => setLog(String(err)))}
+              >
+                {t.switchAndRestart}
               </button>
               <button className="secondary" onClick={() => setDraft(key)}>{t.edit}</button>
               <button

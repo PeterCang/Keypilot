@@ -54,7 +54,17 @@ fn switch_key(id: String) -> Result<SwitchResult, String> {
     .cloned()
     .ok_or_else(|| "key not found".to_string())?;
 
-  let result = switch_key_for_record(&target).map_err(|e| e.to_string())?;
+  let mut result = switch_key_for_record(&target).map_err(|e| e.to_string())?;
+  let running = process::is_tool_running(target.tool);
+  result.requires_restart = running;
+  result.warning = if running {
+    Some("target tool is running, restart recommended".to_string())
+  } else {
+    None
+  };
+  if running {
+    result.message = format!("{}; tool restart is recommended", result.message);
+  }
 
   for item in &mut state.keys {
     if item.tool == target.tool {
@@ -85,6 +95,11 @@ fn install_tool(tool: ToolType) -> Result<String, String> {
   installer::install_tool(tool).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn restart_tool(tool: ToolType) -> Result<String, String> {
+  process::restart_tool(tool)
+}
+
 pub fn run() {
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![
@@ -94,7 +109,8 @@ pub fn run() {
       switch_key,
       detect_tools,
       backup_config,
-      install_tool
+      install_tool,
+      restart_tool
     ])
     .run(tauri::generate_context!())
     .expect("error while running keypilot app");
