@@ -155,6 +155,43 @@ fn switch_env_with_rollback(changes: &[(&str, Option<&str>)]) -> Result<(), AppE
   Ok(())
 }
 
+fn toml_escape(value: &str) -> String {
+  value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn render_codex_config(record: &KeyRecord) -> String {
+  let mut lines = Vec::new();
+  lines.push("[api]".to_string());
+  lines.push(format!("key = \"{}\"", toml_escape(&record.api_key)));
+  if let Some(url) = &record.base_url {
+    lines.push(format!("base_url = \"{}\"", toml_escape(url)));
+  }
+  if let Some(model) = &record.model {
+    lines.push(format!("model = \"{}\"", toml_escape(model)));
+  }
+  lines.push(String::new());
+  lines.join("\n")
+}
+
+fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), AppError> {
+  let tmp_path = path.with_extension("tmp");
+  fs::write(&tmp_path, bytes)?;
+  fs::rename(&tmp_path, path)?;
+  Ok(())
+}
+
+fn restore_file(path: &PathBuf, backup: &Option<Vec<u8>>) -> Result<(), AppError> {
+  match backup {
+    Some(content) => fs::write(path, content)?,
+    None => {
+      if path.exists() {
+        fs::remove_file(path)?;
+      }
+    }
+  }
+  Ok(())
+}
+
 pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> {
   let home = user_home()?;
   match tool {
@@ -207,12 +244,51 @@ pub fn switch_key_for_record(record: &KeyRecord) -> Result<SwitchResult, AppErro
       fs::create_dir_all(&codex_dir)?;
 
       let auth_path = codex_dir.join("auth.json");
+      let config_path = codex_dir.join("config.toml");
+      let auth_before = if auth_path.exists() {
+        Some(fs::read(&auth_path)?)
+      } else {
+        None
+      };
+      let config_before = if config_path.exists() {
+        Some(fs::read(&config_path)?)
+      } else {
+        None
+      };
       if auth_path.exists() {
         fs::copy(&auth_path, auth_path.with_extension("json.bak"))?;
       }
+      if config_path.exists() {
+        fs::copy(&config_path, config_path.with_extension("toml.bak"))?;
+      }
 
       let payload = serde_json::json!({ "OPENAI_API_KEY": record.api_key });
-      fs::write(&auth_path, serde_json::to_vec_pretty(&payload)?)?;
+      let auth_body = serde_json::to_vec_pretty(&payload)?;
+      let config_body = render_codex_config(record);
+
+      let write_result = (|| -> Result<(), AppError> {
+        write_atomic(&auth_path, &auth_body)?;
+        write_atomic(&config_path, config_body.as_bytes())?;
+        Ok(())
+      })();
+
+      if let Err(err) = write_result {
+        let _ = restore_file(&config_path, &config_before);
+        let _ = restore_file(&auth_path, &auth_before);
+        return Err(err);
+      }
+
+      let auth_actual = fs::read_to_string(&auth_path)?;
+      let config_actual = fs::read_to_string(&config_path)?;
+      let auth_ok = auth_actual.contains("OPENAI_API_KEY") && auth_actual.contains(&record.api_key);
+      let config_ok = config_actual.contains("[api]") && config_actual.contains(&record.api_key);
+      if !auth_ok || !config_ok {
+        let _ = restore_file(&config_path, &config_before);
+        let _ = restore_file(&auth_path, &auth_before);
+        return Err(AppError::InvalidState(
+          "codex config verification failed".to_string(),
+        ));
+      }
 
       Ok(SwitchResult {
         success: true,
@@ -262,10 +338,15 @@ mod tests {
     assert!(result.requires_restart);
 
     let auth_path = test_home.join(".codex").join("auth.json");
+    let config_path = test_home.join(".codex").join("config.toml");
     assert!(auth_path.exists(), "auth.json should exist");
+    assert!(config_path.exists(), "config.toml should exist");
     let content = fs::read_to_string(auth_path).expect("read auth.json failed");
+    let config_content = fs::read_to_string(config_path).expect("read config.toml failed");
     assert!(content.contains("OPENAI_API_KEY"));
     assert!(content.contains("sk-codex-test"));
+    assert!(config_content.contains("[api]"));
+    assert!(config_content.contains("sk-codex-test"));
   }
 
   #[test]
