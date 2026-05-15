@@ -2,6 +2,7 @@ use crate::error::AppError;
 use crate::models::{BackupResult, KeyRecord, SwitchResult, ToolType};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn user_home() -> Result<PathBuf, AppError> {
   let home = std::env::var("HOME")
@@ -30,6 +31,130 @@ fn copy_if_exists(tool: ToolType, source: PathBuf) -> Result<BackupResult, AppEr
   })
 }
 
+fn run_command(program: &str, args: &[&str]) -> Result<(), AppError> {
+  let status = Command::new(program).args(args).status()?;
+  if !status.success() {
+    return Err(AppError::InvalidState(format!(
+      "command failed: {} {}",
+      program,
+      args.join(" ")
+    )));
+  }
+  Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn persist_user_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> {
+  match value {
+    Some(v) => run_command(
+      "reg",
+      &[
+        "add",
+        "HKCU\\Environment",
+        "/v",
+        key,
+        "/t",
+        "REG_SZ",
+        "/d",
+        v,
+        "/f",
+      ],
+    ),
+    None => run_command(
+      "reg",
+      &["delete", "HKCU\\Environment", "/v", key, "/f"],
+    ),
+  }
+}
+
+#[cfg(target_os = "windows")]
+fn read_user_env_var(key: &str) -> Result<Option<String>, AppError> {
+  let output = Command::new("reg")
+    .args(["query", "HKCU\\Environment", "/v", key])
+    .output()?;
+  if !output.status.success() {
+    return Ok(None);
+  }
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  for line in stdout.lines() {
+    if line.contains("REG_") && line.contains(key) {
+      let parts: Vec<&str> = line.split_whitespace().collect();
+      if let Some(value) = parts.last() {
+        return Ok(Some((*value).to_string()));
+      }
+    }
+  }
+  Ok(None)
+}
+
+#[cfg(target_os = "macos")]
+fn persist_user_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> {
+  match value {
+    Some(v) => run_command("launchctl", &["setenv", key, v])?,
+    None => run_command("launchctl", &["unsetenv", key])?,
+  }
+  Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn read_user_env_var(key: &str) -> Result<Option<String>, AppError> {
+  let output = Command::new("launchctl").args(["getenv", key]).output()?;
+  if !output.status.success() {
+    return Ok(None);
+  }
+  let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+  if value.is_empty() {
+    Ok(None)
+  } else {
+    Ok(Some(value))
+  }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn persist_user_env_var(_key: &str, _value: Option<&str>) -> Result<(), AppError> {
+  Err(AppError::InvalidState(
+    "persistent env var is not supported on this platform".to_string(),
+  ))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn read_user_env_var(_key: &str) -> Result<Option<String>, AppError> {
+  Ok(None)
+}
+
+fn set_and_verify_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> {
+  persist_user_env_var(key, value)?;
+  let actual = read_user_env_var(key)?;
+  let expected = value.map(|v| v.to_string());
+  if actual != expected {
+    return Err(AppError::InvalidState(format!(
+      "env verify failed for {key}: expected {:?}, got {:?}",
+      expected, actual
+    )));
+  }
+
+  match value {
+    Some(v) => std::env::set_var(key, v),
+    None => std::env::remove_var(key),
+  }
+  Ok(())
+}
+
+fn switch_env_with_rollback(changes: &[(&str, Option<&str>)]) -> Result<(), AppError> {
+  let mut applied: Vec<(&str, Option<String>)> = Vec::new();
+  for (key, value) in changes {
+    let before = read_user_env_var(key)?;
+    if let Err(e) = set_and_verify_env_var(key, *value) {
+      for (rollback_key, rollback_value) in applied.iter().rev() {
+        let _ = set_and_verify_env_var(rollback_key, rollback_value.as_deref());
+      }
+      return Err(e);
+    }
+    applied.push((key, before));
+  }
+  Ok(())
+}
+
 pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> {
   let home = user_home()?;
   match tool {
@@ -52,28 +177,26 @@ pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> 
 pub fn switch_key_for_record(record: &KeyRecord) -> Result<SwitchResult, AppError> {
   match record.tool {
     ToolType::ClaudeCode => {
-      std::env::set_var("ANTHROPIC_AUTH_TOKEN", &record.api_key);
-      if let Some(url) = &record.base_url {
-        std::env::set_var("ANTHROPIC_BASE_URL", url);
-      }
+      switch_env_with_rollback(&[
+        ("ANTHROPIC_AUTH_TOKEN", Some(record.api_key.as_str())),
+        ("ANTHROPIC_BASE_URL", record.base_url.as_deref()),
+      ])?;
       Ok(SwitchResult {
         success: true,
-        warning: Some("仅当前进程生效；MVP 下一步将落地系统级持久化写入".to_string()),
+        warning: None,
         requires_restart: true,
         message: "claude-code key switched".to_string(),
       })
     }
     ToolType::GeminiCli => {
-      std::env::set_var("GEMINI_API_KEY", &record.api_key);
-      if let Some(url) = &record.base_url {
-        std::env::set_var("GOOGLE_GEMINI_BASE_URL", url);
-      }
-      if let Some(model) = &record.model {
-        std::env::set_var("GEMINI_MODEL", model);
-      }
+      switch_env_with_rollback(&[
+        ("GEMINI_API_KEY", Some(record.api_key.as_str())),
+        ("GOOGLE_GEMINI_BASE_URL", record.base_url.as_deref()),
+        ("GEMINI_MODEL", record.model.as_deref()),
+      ])?;
       Ok(SwitchResult {
         success: true,
-        warning: Some("仅当前进程生效；MVP 下一步将落地系统级持久化写入".to_string()),
+        warning: None,
         requires_restart: true,
         message: "gemini-cli key switched".to_string(),
       })
@@ -143,5 +266,24 @@ mod tests {
     let content = fs::read_to_string(auth_path).expect("read auth.json failed");
     assert!(content.contains("OPENAI_API_KEY"));
     assert!(content.contains("sk-codex-test"));
+  }
+
+  #[test]
+  #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+  fn claude_switch_fails_on_unsupported_platform() {
+    let record = KeyRecord {
+      id: "c2".to_string(),
+      name: "claude-main".to_string(),
+      tool: ToolType::ClaudeCode,
+      api_key: "sk-claude-test".to_string(),
+      base_url: Some("https://api.anthropic.com".to_string()),
+      model: None,
+      is_active: true,
+      created_at: "2026-01-01T00:00:00Z".to_string(),
+      updated_at: None,
+      note: None,
+    };
+    let err = switch_key_for_record(&record).expect_err("should fail");
+    assert!(err.to_string().contains("not supported"));
   }
 }
