@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { backupConfig, deleteKey, detectTools, installTool, listKeys, restartTool, saveKey, switchKey } from "./api";
+import {
+  backupConfig,
+  deleteKey,
+  detectTools,
+  installTool,
+  listKeys,
+  restartTool,
+  saveKey,
+  startTool,
+  switchKey,
+  uninstallTool
+} from "./api";
 import { dictionaries, resolveLocale, type Locale } from "./i18n";
 import type { KeyRecord, ToolStatus, ToolType } from "./types";
 
@@ -17,9 +28,12 @@ const emptyDraft: KeyRecord = {
 };
 
 function App() {
+  type ManageTool = "claude-code" | "codex" | "gemini-cli" | "codex-app";
   const [locale, setLocale] = useState<Locale>(resolveLocale(navigator.language));
   const [keys, setKeys] = useState<KeyRecord[]>([]);
   const [tools, setTools] = useState<ToolStatus[]>([]);
+  const [selectedTool, setSelectedTool] = useState<ManageTool>("claude-code");
+  const [launchArgs, setLaunchArgs] = useState("");
   const [draft, setDraft] = useState<KeyRecord>(emptyDraft);
   const [log, setLog] = useState(dictionaries[locale].ready);
 
@@ -99,6 +113,11 @@ function App() {
     await reload();
   };
 
+  const selectedToolStatus = useMemo(() => {
+    if (selectedTool === "codex-app") return { installed: false };
+    return tools.find((x) => x.tool === selectedTool) ?? { installed: false };
+  }, [selectedTool, tools]);
+
   return (
     <div className="app">
       <div className="row head-row">
@@ -112,36 +131,77 @@ function App() {
         </label>
       </div>
 
-      <div className="panel grid">
-        {(["claude-code", "codex", "gemini-cli"] as ToolType[]).map((tool) => {
-          const status = tools.find((x) => x.tool === tool);
-          return (
-            <div key={tool}>
-              <strong>{tool}</strong>
-              <div>{status?.installed ? t.installed : t.notInstalled}</div>
-              <div>{t.activeKey}: {activeByTool[tool]}</div>
+      <div className="panel">
+        <h2>{t.toolManager}</h2>
+        <div className="grid">
+          <label>
+            {t.tool}
+            <select value={selectedTool} onChange={(e) => setSelectedTool(e.target.value as ManageTool)}>
+              <option value="claude-code">Claude Code</option>
+              <option value="codex">Codex CLI</option>
+              <option value="codex-app">Codex App</option>
+              <option value="gemini-cli">Gemini CLI</option>
+            </select>
+          </label>
+          <div>{selectedToolStatus.installed ? t.installed : t.notInstalled}</div>
+        </div>
+        {selectedTool !== "codex-app" ? (
+          <div className="row">
+            {!selectedToolStatus.installed ? (
               <button
-                className="secondary"
                 onClick={async () => {
-                  const result = await backupConfig(tool);
-                  setLog(result.message);
-                }}
-              >
-                {t.backupConfig}
-              </button>
-              <button
-                onClick={async () => {
-                  setLog(`${t.installStarted}: ${tool}`);
-                  const result = await installTool(tool);
+                  setLog(`${t.installStarted}: ${selectedTool}`);
+                  const result = await installTool(selectedTool);
                   setLog(result);
                   await reload();
                 }}
               >
                 {t.installTool}
               </button>
-            </div>
-          );
-        })}
+            ) : (
+              <>
+                <button
+                  className="danger"
+                  onClick={async () => {
+                    const result = await uninstallTool(selectedTool);
+                    setLog(result);
+                    await reload();
+                  }}
+                >
+                  {t.uninstallTool}
+                </button>
+                <label>
+                  {t.launchArgs}
+                  <input value={launchArgs} onChange={(e) => setLaunchArgs(e.target.value)} />
+                </label>
+                <button
+                  onClick={async () => {
+                    const result = await startTool(selectedTool, launchArgs);
+                    setLog(result);
+                  }}
+                >
+                  {t.startTool}
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div>{t.unsupportedToolHint}</div>
+        )}
+        <div className="row">
+          {selectedTool !== "codex-app" ? (
+            <button
+              className="secondary"
+              onClick={async () => {
+                const result = await backupConfig(selectedTool as ToolType);
+                setLog(result.message);
+              }}
+            >
+              {t.backupConfig}
+            </button>
+          ) : null}
+          {selectedTool !== "codex-app" ? <div>{t.activeKey}: {activeByTool[selectedTool as ToolType]}</div> : null}
+        </div>
       </div>
 
       <div className="panel">

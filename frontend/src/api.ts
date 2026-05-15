@@ -9,3 +9,6 @@ export const detectTools = () => invoke<ToolStatus[]>("detect_tools");
 export const backupConfig = (tool: KeyRecord["tool"]) => invoke<BackupResult>("backup_config", { tool });
 export const restartTool = (tool: KeyRecord["tool"]) => invoke<string>("restart_tool", { tool });
 export const installTool = (tool: KeyRecord["tool"]) => invoke<string>("install_tool", { tool });
+export const uninstallTool = (tool: KeyRecord["tool"]) => invoke<string>("uninstall_tool", { tool });
+export const startTool = (tool: KeyRecord["tool"], args: string) =>
+  invoke<string>("start_tool", { tool, args });

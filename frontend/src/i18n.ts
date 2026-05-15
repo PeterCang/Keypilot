@@ -12,6 +12,11 @@ type Dict = {
   activeKey: string;
   backupConfig: string;
   installTool: string;
+  uninstallTool: string;
+  launchArgs: string;
+  startTool: string;
+  toolManager: string;
+  unsupportedToolHint: string;
   editKey: string;
   keyName: string;
   tool: string;
@@ -39,7 +44,7 @@ type Dict = {
 
 export const dictionaries: Record<Locale, Dict> = {
   "zh-CN": {
-    appTitle: "Keypilot MVP 控制台",
+    appTitle: "Keypilot控制台",
     language: "语言",
     zhCN: "中文",
     enUS: "英文",
@@ -50,6 +55,11 @@ export const dictionaries: Record<Locale, Dict> = {
     activeKey: "当前激活",
     backupConfig: "备份配置",
     installTool: "安装工具",
+    uninstallTool: "卸载工具",
+    launchArgs: "启动参数",
+    startTool: "启动工具",
+    toolManager: "工具管理",
+    unsupportedToolHint: "Codex App 当前版本仅展示入口，安装/卸载/启动暂未接入",
     editKey: "新增 / 编辑 Key",
     keyName: "名称",
     tool: "工具",
@@ -76,7 +86,7 @@ export const dictionaries: Record<Locale, Dict> = {
     installStarted: "开始安装"
   },
   "en-US": {
-    appTitle: "Keypilot MVP Console",
+    appTitle: "Keypilot Console",
     language: "Language",
     zhCN: "Chinese",
     enUS: "English",
@@ -87,6 +97,11 @@ export const dictionaries: Record<Locale, Dict> = {
     activeKey: "Active",
     backupConfig: "Backup Config",
     installTool: "Install Tool",
+    uninstallTool: "Uninstall Tool",
+    launchArgs: "Launch Args",
+    startTool: "Start Tool",
+    toolManager: "Tool Manager",
+    unsupportedToolHint: "Codex App is listed, but install/uninstall/start is not wired yet",
     editKey: "Add / Edit Key",
     keyName: "Name",
     tool: "Tool",

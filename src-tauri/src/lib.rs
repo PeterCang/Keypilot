@@ -138,6 +138,16 @@ fn restart_tool(tool: ToolType) -> Result<String, String> {
   process::restart_tool(tool)
 }
 
+#[tauri::command]
+fn uninstall_tool(app: tauri::AppHandle, tool: ToolType) -> Result<String, String> {
+  installer::uninstall_tool(&app, tool).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn start_tool(tool: ToolType, args: Option<String>) -> Result<String, String> {
+  installer::start_tool(tool, args.as_deref().unwrap_or("")).map_err(|e| e.to_string())
+}
+
 pub fn run() {
   tauri::Builder::default()
     .setup(|app| {
@@ -187,7 +197,9 @@ pub fn run() {
       detect_tools,
       backup_config,
       install_tool,
-      restart_tool
+      restart_tool,
+      uninstall_tool,
+      start_tool
     ])
     .run(tauri::generate_context!())
     .expect("error while running keypilot app");

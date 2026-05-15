@@ -14,6 +14,22 @@ fn install_plan(tool: ToolType) -> Option<(&'static str, &'static [&'static str]
   }
 }
 
+fn uninstall_plan(tool: ToolType) -> (&'static str, &'static [&'static str]) {
+  match tool {
+    ToolType::Codex => ("npm", &["uninstall", "-g", "@openai/codex"]),
+    ToolType::ClaudeCode => ("npm", &["uninstall", "-g", "@anthropic-ai/claude-code"]),
+    ToolType::GeminiCli => ("npm", &["uninstall", "-g", "@google/gemini-cli"]),
+  }
+}
+
+fn bin_name(tool: ToolType) -> &'static str {
+  match tool {
+    ToolType::ClaudeCode => "claude",
+    ToolType::Codex => "codex",
+    ToolType::GeminiCli => "gemini",
+  }
+}
+
 fn emit_log(app: &AppHandle, line: impl Into<String>) {
   let _ = app.emit("install-log", line.into());
 }
@@ -69,6 +85,34 @@ pub fn install_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError>
       args.join(" ")
     )))
   }
+}
+
+pub fn uninstall_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError> {
+  let (command, args) = uninstall_plan(tool);
+  emit_log(app, format!("start: {} {}", command, args.join(" ")));
+  let output = Command::new(command).args(args).output()?;
+  if output.status.success() {
+    emit_log(app, "uninstall succeeded");
+    Ok(format!("uninstall succeeded: {} {}", command, args.join(" ")))
+  } else {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(AppError::InvalidState(format!(
+      "uninstall failed: {} {} | {}",
+      command,
+      args.join(" "),
+      stderr.trim()
+    )))
+  }
+}
+
+pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
+  let bin = bin_name(tool);
+  let mut cmd = Command::new(bin);
+  if !args.trim().is_empty() {
+    cmd.args(args.split_whitespace());
+  }
+  cmd.spawn()?;
+  Ok(format!("{bin} started"))
 }
 
 #[cfg(test)]

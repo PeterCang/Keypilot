@@ -303,7 +303,13 @@ pub fn switch_key_for_record(record: &KeyRecord) -> Result<SwitchResult, AppErro
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::sync::{Mutex, OnceLock};
   use std::time::{SystemTime, UNIX_EPOCH};
+
+  fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+  }
 
   fn unique_temp_home() -> PathBuf {
     let nanos = SystemTime::now()
@@ -315,6 +321,7 @@ mod tests {
 
   #[test]
   fn switch_codex_writes_auth_json() {
+    let _guard = env_lock().lock().expect("lock poisoned");
     let test_home = unique_temp_home();
     fs::create_dir_all(&test_home).expect("failed to create temp dir");
     std::env::set_var("HOME", &test_home);
@@ -351,6 +358,7 @@ mod tests {
 
   #[test]
   fn switch_codex_creates_backup_files_when_existing() {
+    let _guard = env_lock().lock().expect("lock poisoned");
     let test_home = unique_temp_home();
     fs::create_dir_all(test_home.join(".codex")).expect("failed to create codex dir");
     std::env::set_var("HOME", &test_home);
@@ -391,6 +399,7 @@ mod tests {
   #[test]
   #[cfg(not(any(target_os = "windows", target_os = "macos")))]
   fn claude_switch_fails_on_unsupported_platform() {
+    let _guard = env_lock().lock().expect("lock poisoned");
     let record = KeyRecord {
       id: "c2".to_string(),
       name: "claude-main".to_string(),
