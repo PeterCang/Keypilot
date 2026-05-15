@@ -350,6 +350,45 @@ mod tests {
   }
 
   #[test]
+  fn switch_codex_creates_backup_files_when_existing() {
+    let test_home = unique_temp_home();
+    fs::create_dir_all(test_home.join(".codex")).expect("failed to create codex dir");
+    std::env::set_var("HOME", &test_home);
+    std::env::set_var("USERPROFILE", &test_home);
+
+    let auth_path = test_home.join(".codex").join("auth.json");
+    let config_path = test_home.join(".codex").join("config.toml");
+    fs::write(&auth_path, r#"{"OPENAI_API_KEY":"old"}"#).expect("seed auth failed");
+    fs::write(&config_path, "[api]\nkey = \"old\"\n").expect("seed config failed");
+
+    let record = KeyRecord {
+      id: "c3".to_string(),
+      name: "codex-next".to_string(),
+      tool: ToolType::Codex,
+      api_key: "sk-codex-new".to_string(),
+      base_url: Some("https://api.openai.com/v1".to_string()),
+      model: Some("gpt-5".to_string()),
+      is_active: true,
+      created_at: "2026-01-01T00:00:00Z".to_string(),
+      updated_at: None,
+      note: None,
+    };
+
+    let result = switch_key_for_record(&record).expect("switch failed");
+    assert!(result.success);
+
+    let auth_bak = test_home.join(".codex").join("auth.json.bak");
+    let config_bak = test_home.join(".codex").join("config.toml.bak");
+    assert!(auth_bak.exists(), "auth backup should exist");
+    assert!(config_bak.exists(), "config backup should exist");
+
+    let auth_new = fs::read_to_string(auth_path).expect("read new auth failed");
+    let config_new = fs::read_to_string(config_path).expect("read new config failed");
+    assert!(auth_new.contains("sk-codex-new"));
+    assert!(config_new.contains("gpt-5"));
+  }
+
+  #[test]
   #[cfg(not(any(target_os = "windows", target_os = "macos")))]
   fn claude_switch_fails_on_unsupported_platform() {
     let record = KeyRecord {
