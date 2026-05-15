@@ -32,6 +32,7 @@ type Dict = {
   deletedKey: string;
   restartRecommended: string;
   restartedTool: string;
+  traySwitched: string;
 };
 
 export const dictionaries: Record<Locale, Dict> = {
@@ -66,7 +67,8 @@ export const dictionaries: Record<Locale, Dict> = {
     savedKey: "已保存 Key",
     deletedKey: "已删除 Key",
     restartRecommended: "检测到工具正在运行，建议重启",
-    restartedTool: "已执行重启指令"
+    restartedTool: "已执行重启指令",
+    traySwitched: "托盘已切换 Key"
   },
   "en-US": {
     appTitle: "Keypilot MVP Console",
@@ -99,7 +101,8 @@ export const dictionaries: Record<Locale, Dict> = {
     savedKey: "Saved key",
     deletedKey: "Deleted key",
     restartRecommended: "Tool is running, restart is recommended",
-    restartedTool: "Restart command has been executed"
+    restartedTool: "Restart command has been executed",
+    traySwitched: "Key switched from tray"
   }
 };
 

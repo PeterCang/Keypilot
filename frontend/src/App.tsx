@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { backupConfig, deleteKey, detectTools, listKeys, restartTool, saveKey, switchKey } from "./api";
 import { dictionaries, resolveLocale, type Locale } from "./i18n";
 import type { KeyRecord, ToolStatus, ToolType } from "./types";
@@ -48,6 +49,17 @@ function App() {
     reload().catch((err) => setLog(`${t.initFailed}: ${String(err)}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const unlistenPromise = listen<string>("key-switched", async (event) => {
+      setLog(`${t.traySwitched}: ${event.payload}`);
+      await reload();
+    });
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten()).catch(() => undefined);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]);
 
   useEffect(() => {
     if (log === dictionaries[locale === "zh-CN" ? "en-US" : "zh-CN"].ready) {
