@@ -129,8 +129,8 @@ fn backup_config(tool: ToolType) -> Result<BackupResult, String> {
 }
 
 #[tauri::command]
-fn install_tool(tool: ToolType) -> Result<String, String> {
-  installer::install_tool(tool).map_err(|e| e.to_string())
+fn install_tool(app: tauri::AppHandle, tool: ToolType) -> Result<String, String> {
+  installer::install_tool(&app, tool).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

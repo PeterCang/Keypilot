@@ -11,6 +11,7 @@ type Dict = {
   notInstalled: string;
   activeKey: string;
   backupConfig: string;
+  installTool: string;
   editKey: string;
   keyName: string;
   tool: string;
@@ -33,6 +34,7 @@ type Dict = {
   restartRecommended: string;
   restartedTool: string;
   traySwitched: string;
+  installStarted: string;
 };
 
 export const dictionaries: Record<Locale, Dict> = {
@@ -47,6 +49,7 @@ export const dictionaries: Record<Locale, Dict> = {
     notInstalled: "未安装",
     activeKey: "当前激活",
     backupConfig: "备份配置",
+    installTool: "安装工具",
     editKey: "新增 / 编辑 Key",
     keyName: "名称",
     tool: "工具",
@@ -69,6 +72,8 @@ export const dictionaries: Record<Locale, Dict> = {
     restartRecommended: "检测到工具正在运行，建议重启",
     restartedTool: "已执行重启指令",
     traySwitched: "托盘已切换 Key"
+    ,
+    installStarted: "开始安装"
   },
   "en-US": {
     appTitle: "Keypilot MVP Console",
@@ -81,6 +86,7 @@ export const dictionaries: Record<Locale, Dict> = {
     notInstalled: "Not Installed",
     activeKey: "Active",
     backupConfig: "Backup Config",
+    installTool: "Install Tool",
     editKey: "Add / Edit Key",
     keyName: "Name",
     tool: "Tool",
@@ -102,7 +108,8 @@ export const dictionaries: Record<Locale, Dict> = {
     deletedKey: "Deleted key",
     restartRecommended: "Tool is running, restart is recommended",
     restartedTool: "Restart command has been executed",
-    traySwitched: "Key switched from tray"
+    traySwitched: "Key switched from tray",
+    installStarted: "Install started"
   }
 };
 

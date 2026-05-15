@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { backupConfig, deleteKey, detectTools, listKeys, restartTool, saveKey, switchKey } from "./api";
+import { backupConfig, deleteKey, detectTools, installTool, listKeys, restartTool, saveKey, switchKey } from "./api";
 import { dictionaries, resolveLocale, type Locale } from "./i18n";
 import type { KeyRecord, ToolStatus, ToolType } from "./types";
 
@@ -55,8 +55,12 @@ function App() {
       setLog(`${t.traySwitched}: ${event.payload}`);
       await reload();
     });
+    const installLogUnlistenPromise = listen<string>("install-log", (event) => {
+      setLog((prev) => `${prev}\n${event.payload}`);
+    });
     return () => {
       unlistenPromise.then((unlisten) => unlisten()).catch(() => undefined);
+      installLogUnlistenPromise.then((unlisten) => unlisten()).catch(() => undefined);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locale]);
@@ -124,6 +128,16 @@ function App() {
                 }}
               >
                 {t.backupConfig}
+              </button>
+              <button
+                onClick={async () => {
+                  setLog(`${t.installStarted}: ${tool}`);
+                  const result = await installTool(tool);
+                  setLog(result);
+                  await reload();
+                }}
+              >
+                {t.installTool}
               </button>
             </div>
           );
