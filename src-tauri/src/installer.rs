@@ -116,6 +116,21 @@ pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
     .filter(|path| std::path::Path::new(path).is_file())
     .unwrap_or_else(|| bin_name(tool).to_string());
 
+  #[cfg(target_os = "windows")]
+  {
+    if !matches!(tool, ToolType::CodexApp) {
+      let run_line = if args.trim().is_empty() {
+        format!("\"{target}\"")
+      } else {
+        format!("\"{target}\" {args}")
+      };
+      Command::new("cmd")
+        .args(["/C", "start", "", "cmd", "/K", &run_line])
+        .spawn()?;
+      return Ok(format!("{target} started in a new terminal window"));
+    }
+  }
+
   let mut cmd = Command::new(&target);
   if !args.trim().is_empty() {
     cmd.args(args.split_whitespace());
