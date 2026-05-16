@@ -109,13 +109,19 @@ pub fn uninstall_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppErro
 }
 
 pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
-  let bin = bin_name(tool);
-  let mut cmd = Command::new(bin);
+  let status = detect_tool(tool);
+  let target = status
+    .location
+    .filter(|path| !path.trim().is_empty())
+    .filter(|path| std::path::Path::new(path).is_file())
+    .unwrap_or_else(|| bin_name(tool).to_string());
+
+  let mut cmd = Command::new(&target);
   if !args.trim().is_empty() {
     cmd.args(args.split_whitespace());
   }
   cmd.spawn()?;
-  Ok(format!("{bin} started"))
+  Ok(format!("{target} started"))
 }
 
 #[cfg(test)]
