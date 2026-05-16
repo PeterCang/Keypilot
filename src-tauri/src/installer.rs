@@ -112,6 +112,7 @@ pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
   let status = detect_tool(tool);
   let target = status
     .location
+    .map(|path| path.trim().trim_matches('"').to_string())
     .filter(|path| !path.trim().is_empty())
     .filter(|path| std::path::Path::new(path).is_file())
     .unwrap_or_else(|| bin_name(tool).to_string());
@@ -120,9 +121,9 @@ pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
   {
     if !matches!(tool, ToolType::CodexApp) {
       let run_line = if args.trim().is_empty() {
-        format!("\"{target}\"")
+        target.clone()
       } else {
-        format!("\"{target}\" {args}")
+        format!("{target} {args}")
       };
       Command::new("cmd")
         .args(["/C", "start", "", "cmd", "/K", &run_line])
