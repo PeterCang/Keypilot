@@ -109,7 +109,7 @@ pub fn uninstall_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppErro
   }
 }
 
-pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
+pub fn start_tool(tool: ToolType, args: &str, project_dir: Option<&str>) -> Result<String, AppError> {
   let status = detect_tool(tool);
   let target = status
     .location
@@ -127,6 +127,18 @@ pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
     }
   }
 
+  let launch_dir = {
+    let dir = project_dir
+      .map(str::trim)
+      .filter(|x| !x.is_empty())
+      .ok_or_else(|| AppError::InvalidState("project directory is required".to_string()))?;
+    let path = std::path::PathBuf::from(dir);
+    if !path.is_dir() {
+      return Err(AppError::InvalidState(format!("project directory not found: {dir}")));
+    }
+    path
+  };
+
   #[cfg(target_os = "windows")]
   {
     if !matches!(tool, ToolType::CodexApp) {
@@ -137,12 +149,18 @@ pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
       };
       Command::new("cmd")
         .args(["/C", "start", "", "cmd", "/K", &run_line])
+        .current_dir(&launch_dir)
+        .env("PROJECT_DIRECTORY", &launch_dir)
+        .env("PROJECT_DIRECTOR", &launch_dir)
         .spawn()?;
       return Ok(format!("{target} started in a new terminal window"));
     }
   }
 
   let mut cmd = Command::new(&target);
+  cmd.current_dir(&launch_dir);
+  cmd.env("PROJECT_DIRECTORY", &launch_dir);
+  cmd.env("PROJECT_DIRECTOR", &launch_dir);
   if !parsed_args.is_empty() {
     cmd.args(parsed_args);
   }

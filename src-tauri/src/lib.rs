@@ -146,12 +146,13 @@ fn uninstall_tool(app: tauri::AppHandle, tool: ToolType) -> Result<String, Strin
 }
 
 #[tauri::command]
-fn start_tool(tool: ToolType, args: Option<String>) -> Result<String, String> {
-  installer::start_tool(tool, args.as_deref().unwrap_or("")).map_err(|e| e.to_string())
+fn start_tool(tool: ToolType, args: Option<String>, project_dir: Option<String>) -> Result<String, String> {
+  installer::start_tool(tool, args.as_deref().unwrap_or(""), project_dir.as_deref()).map_err(|e| e.to_string())
 }
 
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
     .setup(|app| {
       let app_handle = app.handle().clone();
       let menu = build_tray_menu(&app_handle)?;

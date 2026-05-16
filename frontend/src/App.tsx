@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { message, open } from "@tauri-apps/plugin-dialog";
 import {
   deleteKey,
   detectTools,
@@ -32,6 +33,7 @@ function App() {
   const [tools, setTools] = useState<ToolStatus[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTool, setSelectedTool] = useState<ToolType>("claude-code");
+  const [projectDir, setProjectDir] = useState("");
   const [launchArgs, setLaunchArgs] = useState("");
   const [showArgMenu, setShowArgMenu] = useState(false);
   const argMenuWrapRef = useRef<HTMLDivElement | null>(null);
@@ -248,6 +250,24 @@ function App() {
             </button>
           ) : (
             <>
+              <label className="project-dir-label">
+                <span>{t.projectDir}</span>
+                <div className="project-dir-input-wrap">
+                  <input value={projectDir} onChange={(e) => setProjectDir(e.target.value)} />
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={async () => {
+                      const selected = await open({ directory: true, multiple: false });
+                      if (typeof selected === "string") {
+                        setProjectDir(selected);
+                      }
+                    }}
+                  >
+                    {t.selectDir}
+                  </button>
+                </div>
+              </label>
               <label className="launch-args-label">
                 <span>{t.launchArgs}</span>
                 <div className="launch-args-input-wrap">
@@ -281,7 +301,14 @@ function App() {
               </label>
               <button
                 onClick={async () => {
-                  const result = await startTool(selectedTool, launchArgs);
+                  if (!projectDir.trim()) {
+                    await message(t.projectDirRequired, {
+                      title: t.projectDir,
+                      kind: "warning"
+                    });
+                    return;
+                  }
+                  const result = await startTool(selectedTool, launchArgs, projectDir || undefined);
                   setLog(result);
                 }}
               >

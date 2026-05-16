@@ -14,6 +14,9 @@ type Dict = {
   installTool: string;
   uninstallTool: string;
   launchArgs: string;
+  projectDir: string;
+  selectDir: string;
+  projectDirRequired: string;
   startTool: string;
   toolManager: string;
   addKey: string;
@@ -61,6 +64,9 @@ export const dictionaries: Record<Locale, Dict> = {
     installTool: "安装工具",
     uninstallTool: "卸载工具",
     launchArgs: "启动参数",
+    projectDir: "项目目录",
+    selectDir: "选择目录",
+    projectDirRequired: "请先选择项目目录，再启动工具",
     startTool: "启动工具",
     toolManager: "工具管理",
     addKey: "新增 Key",
@@ -107,6 +113,9 @@ export const dictionaries: Record<Locale, Dict> = {
     installTool: "Install Tool",
     uninstallTool: "Uninstall Tool",
     launchArgs: "Launch Args",
+    projectDir: "Project Directory",
+    selectDir: "Browse",
+    projectDirRequired: "Please select a project directory before starting the tool",
     startTool: "Start Tool",
     toolManager: "Tool Manager",
     addKey: "Add Key",
