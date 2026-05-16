@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   deleteKey,
@@ -34,6 +34,7 @@ function App() {
   const [selectedTool, setSelectedTool] = useState<ToolType>("claude-code");
   const [launchArgs, setLaunchArgs] = useState("");
   const [showArgMenu, setShowArgMenu] = useState(false);
+  const argMenuWrapRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<KeyRecord>(emptyDraft);
   const [log, setLog] = useState(dictionaries[locale].ready);
 
@@ -74,6 +75,20 @@ function App() {
   useEffect(() => {
     setShowArgMenu(false);
   }, [selectedTool]);
+
+  useEffect(() => {
+    if (!showArgMenu) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (argMenuWrapRef.current?.contains(target)) return;
+      setShowArgMenu(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [showArgMenu]);
 
   const onSubmit = async () => {
     const now = new Date().toISOString();
@@ -237,7 +252,7 @@ function App() {
                 <span>{t.launchArgs}</span>
                 <div className="launch-args-input-wrap">
                   <input value={launchArgs} onChange={(e) => setLaunchArgs(e.target.value)} />
-                  <div className="args-plus-wrap">
+                  <div className="args-plus-wrap" ref={argMenuWrapRef}>
                     <button
                       type="button"
                       className="arg-plus-button"
