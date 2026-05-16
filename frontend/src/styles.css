@@ -8,16 +8,16 @@
 body { margin: 0; }
 
 .app {
-  max-width: 920px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 24px;
+  padding: 10px;
 }
 
 .panel {
   background: #fff;
   border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: 12px;
+  margin-bottom: 10px;
   box-shadow: 0 6px 20px rgba(16, 24, 40, 0.08);
 }
 
@@ -52,6 +52,101 @@ button.danger { background: #b91c1c; }
 .locale-picker select { margin-top: 4px; }
 .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #ecfeff; color: #155e75; }
 .log { white-space: pre-wrap; background: #0b1020; color: #d1fae5; padding: 10px; border-radius: 8px; min-height: 64px; }
+
+.tool-manager-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.tool-select-label {
+  flex: 1 1 280px;
+  min-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-label-text {
+  white-space: nowrap;
+}
+
+.tool-select-label select {
+  margin-top: 0;
+}
+
+.tool-install-status {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  align-self: flex-end;
+  margin-bottom: 8px;
+}
+
+.tool-actions-row {
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.launch-args-label {
+  flex: 1 1 280px;
+  min-width: 260px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.launch-args-label span {
+  white-space: nowrap;
+}
+
+.launch-args-label input {
+  margin-top: 0;
+  flex: 1 1 auto;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.plus-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 999;
+}
+
+.modal-card {
+  width: min(860px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.25);
+}
 
 @media (max-width: 640px) {
   .head-row {

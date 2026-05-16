@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
-  backupConfig,
   deleteKey,
   detectTools,
   installTool,
@@ -18,7 +17,7 @@ import type { KeyRecord, ToolStatus, ToolType } from "./types";
 const emptyDraft: KeyRecord = {
   id: "",
   name: "",
-  tool: "codex",
+  tool: "claude-code",
   apiKey: "",
   baseUrl: "",
   model: "",
@@ -28,30 +27,16 @@ const emptyDraft: KeyRecord = {
 };
 
 function App() {
-  type ManageTool = "claude-code" | "codex" | "gemini-cli" | "codex-app";
   const [locale, setLocale] = useState<Locale>(resolveLocale(navigator.language));
   const [keys, setKeys] = useState<KeyRecord[]>([]);
   const [tools, setTools] = useState<ToolStatus[]>([]);
-  const [selectedTool, setSelectedTool] = useState<ManageTool>("claude-code");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<ToolType>("claude-code");
   const [launchArgs, setLaunchArgs] = useState("");
   const [draft, setDraft] = useState<KeyRecord>(emptyDraft);
   const [log, setLog] = useState(dictionaries[locale].ready);
 
   const t = dictionaries[locale];
-
-  const activeByTool = useMemo(() => {
-    const map: Record<ToolType, string> = {
-      "claude-code": "-",
-      codex: "-",
-      "gemini-cli": "-"
-    };
-    for (const key of keys) {
-      if (key.isActive) {
-        map[key.tool] = key.name;
-      }
-    }
-    return map;
-  }, [keys]);
 
   const reload = async () => {
     const [k, tStatus] = await Promise.all([listKeys(), detectTools()]);
@@ -87,15 +72,18 @@ function App() {
 
   const onSubmit = async () => {
     const now = new Date().toISOString();
+    const autoName = `${draft.tool}-${now.slice(0, 19).replace("T", " ")}`;
     const payload: KeyRecord = {
       ...draft,
       id: draft.id || crypto.randomUUID(),
+      name: draft.name || autoName,
       createdAt: draft.createdAt || now,
       updatedAt: now
     };
     await saveKey(payload);
     setLog(`${t.savedKey}: ${payload.name}`);
     setDraft(emptyDraft);
+    setShowAddModal(false);
     await reload();
   };
 
@@ -114,9 +102,24 @@ function App() {
   };
 
   const selectedToolStatus = useMemo(() => {
-    if (selectedTool === "codex-app") return { installed: false };
     return tools.find((x) => x.tool === selectedTool) ?? { installed: false };
   }, [selectedTool, tools]);
+
+  const toolOptions: Array<{ value: ToolType; label: string }> = useMemo(() => {
+    const base: Array<{ value: ToolType; label: string }> = [
+      { value: "claude-code", label: "Claude Code" },
+      { value: "codex", label: "Codex CLI" },
+      { value: "codex-app", label: "Codex App" },
+      { value: "gemini-cli", label: "Gemini CLI" }
+    ];
+    return base.map((item) => {
+      const version = tools.find((tItem) => tItem.tool === item.value)?.version;
+      return {
+        ...item,
+        label: version ? `${item.label} (${version})` : item.label
+      };
+    });
+  }, [tools]);
 
   return (
     <div className="app">
@@ -133,117 +136,74 @@ function App() {
 
       <div className="panel">
         <h2>{t.toolManager}</h2>
-        <div className="grid">
-          <label>
-            {t.tool}
-            <select value={selectedTool} onChange={(e) => setSelectedTool(e.target.value as ManageTool)}>
-              <option value="claude-code">Claude Code</option>
-              <option value="codex">Codex CLI</option>
-              <option value="codex-app">Codex App</option>
-              <option value="gemini-cli">Gemini CLI</option>
+        <div className="tool-manager-inline">
+          <div className="tool-select-label">
+            <span className="tool-label-text">{t.tool}</span>
+            <select value={selectedTool} onChange={(e) => setSelectedTool(e.target.value as ToolType)}>
+              {toolOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
             </select>
-          </label>
-          <div>{selectedToolStatus.installed ? t.installed : t.notInstalled}</div>
+          </div>
+          <div className="tool-install-status">{selectedToolStatus.installed ? t.installed : t.notInstalled}</div>
         </div>
-        {selectedTool !== "codex-app" ? (
-          <div className="row">
-            {!selectedToolStatus.installed ? (
+        <div className="row tool-actions-row">
+          {!selectedToolStatus.installed ? (
+            <button
+              onClick={async () => {
+                setLog(`${t.installStarted}: ${selectedTool}`);
+                const result = await installTool(selectedTool);
+                setLog(result);
+                await reload();
+              }}
+            >
+              {t.installTool}
+            </button>
+          ) : (
+            <>
+              <label className="launch-args-label">
+                <span>{t.launchArgs}</span>
+                <input value={launchArgs} onChange={(e) => setLaunchArgs(e.target.value)} />
+              </label>
               <button
                 onClick={async () => {
-                  setLog(`${t.installStarted}: ${selectedTool}`);
-                  const result = await installTool(selectedTool);
+                  const result = await startTool(selectedTool, launchArgs);
+                  setLog(result);
+                }}
+              >
+                {t.startTool}
+              </button>
+              <button
+                className="danger"
+                onClick={async () => {
+                  const result = await uninstallTool(selectedTool);
                   setLog(result);
                   await reload();
                 }}
               >
-                {t.installTool}
+                {t.uninstallTool}
               </button>
-            ) : (
-              <>
-                <button
-                  className="danger"
-                  onClick={async () => {
-                    const result = await uninstallTool(selectedTool);
-                    setLog(result);
-                    await reload();
-                  }}
-                >
-                  {t.uninstallTool}
-                </button>
-                <label>
-                  {t.launchArgs}
-                  <input value={launchArgs} onChange={(e) => setLaunchArgs(e.target.value)} />
-                </label>
-                <button
-                  onClick={async () => {
-                    const result = await startTool(selectedTool, launchArgs);
-                    setLog(result);
-                  }}
-                >
-                  {t.startTool}
-                </button>
-              </>
-            )}
-          </div>
-        ) : (
-          <div>{t.unsupportedToolHint}</div>
-        )}
-        <div className="row">
-          {selectedTool !== "codex-app" ? (
-            <button
-              className="secondary"
-              onClick={async () => {
-                const result = await backupConfig(selectedTool as ToolType);
-                setLog(result.message);
-              }}
-            >
-              {t.backupConfig}
-            </button>
-          ) : null}
-          {selectedTool !== "codex-app" ? <div>{t.activeKey}: {activeByTool[selectedTool as ToolType]}</div> : null}
+            </>
+          )}
         </div>
       </div>
 
       <div className="panel">
-        <h2>{t.editKey}</h2>
-        <div className="grid">
-          <label>
-            {t.keyName}
-            <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          </label>
-          <label>
-            {t.tool}
-            <select value={draft.tool} onChange={(e) => setDraft({ ...draft, tool: e.target.value as ToolType })}>
-              <option value="claude-code">claude-code</option>
-              <option value="codex">codex</option>
-              <option value="gemini-cli">gemini-cli</option>
-            </select>
-          </label>
-          <label>
-            {t.apiKey}
-            <input value={draft.apiKey} onChange={(e) => setDraft({ ...draft, apiKey: e.target.value })} />
-          </label>
-          <label>
-            {t.baseUrl}
-            <input value={draft.baseUrl || ""} onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })} />
-          </label>
-          <label>
-            {t.model}
-            <input value={draft.model || ""} onChange={(e) => setDraft({ ...draft, model: e.target.value })} />
-          </label>
-          <label>
-            {t.note}
-            <textarea value={draft.note || ""} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
-          </label>
+        <div className="panel-head">
+          <h2>{t.keyList}</h2>
+          <button
+            className="plus-button"
+            onClick={() => {
+              setDraft(emptyDraft);
+              setShowAddModal(true);
+            }}
+            aria-label={t.saveKey}
+          >
+            +
+          </button>
         </div>
-        <div className="row">
-          <button onClick={() => onSubmit().catch((err) => setLog(String(err)))}>{t.saveKey}</button>
-          <button className="secondary" onClick={() => setDraft(emptyDraft)}>{t.clear}</button>
-        </div>
-      </div>
-
-      <div className="panel">
-        <h2>{t.keyList}</h2>
         {keys.map((key) => (
           <div key={key.id} className="list-item">
             <div className="row">
@@ -264,7 +224,6 @@ function App() {
               >
                 {t.switchAndRestart}
               </button>
-              <button className="secondary" onClick={() => setDraft(key)}>{t.edit}</button>
               <button
                 className="danger"
                 onClick={async () => {
@@ -279,6 +238,48 @@ function App() {
           </div>
         ))}
       </div>
+
+      {showAddModal ? (
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="panel-head">
+              <h2>{t.addKey}</h2>
+              <button className="plus-button" onClick={() => setShowAddModal(false)} aria-label="Close">x</button>
+            </div>
+            <div className="grid">
+              <label>
+                {t.tool}
+                <select value={draft.tool} onChange={(e) => setDraft({ ...draft, tool: e.target.value as ToolType })}>
+                  {toolOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t.apiKey}
+                <input value={draft.apiKey} onChange={(e) => setDraft({ ...draft, apiKey: e.target.value })} />
+              </label>
+              <label>
+                {t.baseUrl}
+                <input value={draft.baseUrl || ""} onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })} />
+              </label>
+              <label>
+                {t.model}
+                <input value={draft.model || ""} onChange={(e) => setDraft({ ...draft, model: e.target.value })} />
+              </label>
+              <label>
+                {t.remark}
+                <input value={draft.note || ""} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
+              </label>
+            </div>
+            <div className="row">
+              <button onClick={() => onSubmit().catch((err) => setLog(String(err)))}>{t.saveKey}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="panel">
         <h2>{t.log}</h2>
