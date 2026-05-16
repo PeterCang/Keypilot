@@ -22,6 +22,7 @@ fn tool_label(tool: ToolType) -> &'static str {
   match tool {
     ToolType::ClaudeCode => "claude-code",
     ToolType::Codex => "codex",
+    ToolType::CodexApp => "codex-app",
     ToolType::GeminiCli => "gemini-cli",
   }
 }
@@ -119,6 +120,7 @@ fn detect_tools() -> Result<Vec<ToolStatus>, String> {
   Ok(vec![
     process::detect_tool(ToolType::ClaudeCode),
     process::detect_tool(ToolType::Codex),
+    process::detect_tool(ToolType::CodexApp),
     process::detect_tool(ToolType::GeminiCli),
   ])
 }

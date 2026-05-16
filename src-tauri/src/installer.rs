@@ -9,6 +9,7 @@ use tauri::Emitter;
 fn install_plan(tool: ToolType) -> Option<(&'static str, &'static [&'static str])> {
   match tool {
     ToolType::Codex => Some(("npm", &["install", "-g", "@openai/codex"])),
+    ToolType::CodexApp => Some(("npm", &["install", "-g", "@openai/codex"])),
     ToolType::ClaudeCode => Some(("npm", &["install", "-g", "@anthropic-ai/claude-code"])),
     ToolType::GeminiCli => Some(("npm", &["install", "-g", "@google/gemini-cli"])),
   }
@@ -17,6 +18,7 @@ fn install_plan(tool: ToolType) -> Option<(&'static str, &'static [&'static str]
 fn uninstall_plan(tool: ToolType) -> (&'static str, &'static [&'static str]) {
   match tool {
     ToolType::Codex => ("npm", &["uninstall", "-g", "@openai/codex"]),
+    ToolType::CodexApp => ("npm", &["uninstall", "-g", "@openai/codex"]),
     ToolType::ClaudeCode => ("npm", &["uninstall", "-g", "@anthropic-ai/claude-code"]),
     ToolType::GeminiCli => ("npm", &["uninstall", "-g", "@google/gemini-cli"]),
   }
@@ -26,6 +28,7 @@ fn bin_name(tool: ToolType) -> &'static str {
   match tool {
     ToolType::ClaudeCode => "claude",
     ToolType::Codex => "codex",
+    ToolType::CodexApp => "codex",
     ToolType::GeminiCli => "gemini",
   }
 }

@@ -16,6 +16,7 @@ type Dict = {
   launchArgs: string;
   startTool: string;
   toolManager: string;
+  addKey: string;
   unsupportedToolHint: string;
   editKey: string;
   keyName: string;
@@ -24,6 +25,7 @@ type Dict = {
   baseUrl: string;
   model: string;
   note: string;
+  remark: string;
   saveKey: string;
   clear: string;
   keyList: string;
@@ -59,6 +61,7 @@ export const dictionaries: Record<Locale, Dict> = {
     launchArgs: "启动参数",
     startTool: "启动工具",
     toolManager: "工具管理",
+    addKey: "新增 Key",
     unsupportedToolHint: "Codex App 当前版本仅展示入口，安装/卸载/启动暂未接入",
     editKey: "新增 / 编辑 Key",
     keyName: "名称",
@@ -67,6 +70,7 @@ export const dictionaries: Record<Locale, Dict> = {
     baseUrl: "Base URL",
     model: "Model",
     note: "备注",
+    remark: "Remark",
     saveKey: "保存 Key",
     clear: "清空",
     keyList: "Key 列表",
@@ -101,6 +105,7 @@ export const dictionaries: Record<Locale, Dict> = {
     launchArgs: "Launch Args",
     startTool: "Start Tool",
     toolManager: "Tool Manager",
+    addKey: "Add Key",
     unsupportedToolHint: "Codex App is listed, but install/uninstall/start is not wired yet",
     editKey: "Add / Edit Key",
     keyName: "Name",
@@ -109,6 +114,7 @@ export const dictionaries: Record<Locale, Dict> = {
     baseUrl: "Base URL",
     model: "Model",
     note: "Note",
+    remark: "Remark",
     saveKey: "Save Key",
     clear: "Clear",
     keyList: "Key List",

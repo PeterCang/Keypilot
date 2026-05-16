@@ -195,7 +195,7 @@ fn restore_file(path: &PathBuf, backup: &Option<Vec<u8>>) -> Result<(), AppError
 pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> {
   let home = user_home()?;
   match tool {
-    ToolType::Codex => copy_if_exists(tool, home.join(".codex").join("auth.json")),
+    ToolType::Codex | ToolType::CodexApp => copy_if_exists(tool, home.join(".codex").join("auth.json")),
     ToolType::ClaudeCode => Ok(BackupResult {
       tool,
       backup_path: None,
@@ -238,7 +238,7 @@ pub fn switch_key_for_record(record: &KeyRecord) -> Result<SwitchResult, AppErro
         message: "gemini-cli key switched".to_string(),
       })
     }
-    ToolType::Codex => {
+    ToolType::Codex | ToolType::CodexApp => {
       let home = user_home()?;
       let codex_dir = home.join(".codex");
       fs::create_dir_all(&codex_dir)?;
