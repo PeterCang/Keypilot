@@ -33,6 +33,7 @@ function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTool, setSelectedTool] = useState<ToolType>("claude-code");
   const [launchArgs, setLaunchArgs] = useState("");
+  const [showArgMenu, setShowArgMenu] = useState(false);
   const [draft, setDraft] = useState<KeyRecord>(emptyDraft);
   const [log, setLog] = useState(dictionaries[locale].ready);
 
@@ -69,6 +70,10 @@ function App() {
       setLog(t.ready);
     }
   }, [locale, log, t.ready]);
+
+  useEffect(() => {
+    setShowArgMenu(false);
+  }, [selectedTool]);
 
   const onSubmit = async () => {
     const now = new Date().toISOString();
@@ -121,6 +126,71 @@ function App() {
     });
   }, [tools]);
 
+  const argPresetsByTool: Record<ToolType, string[]> = useMemo(
+    () => ({
+      "claude-code": [
+        "--dangerously-skip-permissions",
+        "--model sonnet",
+        "--model opus",
+        "--continue",
+        "--resume latest",
+        "--permission-mode default",
+        "--permission-mode auto",
+        "--permission-mode plan",
+        "--allowed-tools \"Bash Edit Read\"",
+        "--disallowed-tools \"Bash(rm *)\"",
+        "--debug",
+        "--ide",
+        "--print"
+      ],
+      codex: [
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--model gpt-5.5",
+        "--profile default",
+        "--ask-for-approval on-request",
+        "--ask-for-approval never",
+        "--sandbox workspace-write",
+        "--sandbox read-only",
+        "--search",
+        "--oss"
+      ],
+      "codex-app": [
+        "app .",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--model gpt-5.5",
+        "--profile default",
+        "--ask-for-approval on-request",
+        "--ask-for-approval never",
+        "--sandbox workspace-write",
+        "--sandbox read-only",
+        "--search",
+        "--oss"
+      ],
+      "gemini-cli": [
+        "--model pro",
+        "--model flash",
+        "--resume latest",
+        "--approval-mode default",
+        "--approval-mode auto_edit",
+        "--approval-mode plan",
+        "--approval-mode yolo",
+        "--sandbox",
+        "--skip-trust",
+        "--debug"
+      ]
+    }),
+    []
+  );
+
+  const appendLaunchArg = (arg: string) => {
+    setLaunchArgs((prev) => {
+      const trimmed = prev.trim();
+      if (!trimmed) return arg;
+      return `${trimmed} ${arg}`;
+    });
+    setShowArgMenu(false);
+  };
+
   return (
     <div className="app">
       <div className="row head-row">
@@ -165,7 +235,34 @@ function App() {
             <>
               <label className="launch-args-label">
                 <span>{t.launchArgs}</span>
-                <input value={launchArgs} onChange={(e) => setLaunchArgs(e.target.value)} />
+                <div className="launch-args-input-wrap">
+                  <input value={launchArgs} onChange={(e) => setLaunchArgs(e.target.value)} />
+                  <div className="args-plus-wrap">
+                    <button
+                      type="button"
+                      className="arg-plus-button"
+                      aria-label={t.addArg}
+                      onClick={() => setShowArgMenu((v) => !v)}
+                    >
+                      +
+                    </button>
+                    {showArgMenu ? (
+                      <div className="arg-menu">
+                        <div className="arg-menu-title">{t.argPresets}</div>
+                        {argPresetsByTool[selectedTool].map((item) => (
+                          <button
+                            key={item}
+                            type="button"
+                            className="arg-menu-item"
+                            onClick={() => appendLaunchArg(item)}
+                          >
+                            {item}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </label>
               <button
                 onClick={async () => {

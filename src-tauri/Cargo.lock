@@ -1648,6 +1648,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "shlex",
  "tauri",
  "tauri-build",
  "thiserror 1.0.69",

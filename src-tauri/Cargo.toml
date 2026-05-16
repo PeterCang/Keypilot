@@ -20,3 +20,4 @@ tauri = { version = "2.0.0", features = ["tray-icon"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde", "clock"] }
 which = "6"
+shlex = "1"

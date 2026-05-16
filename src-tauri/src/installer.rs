@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::ToolType;
 use crate::process::detect_tool;
+use shlex;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use tauri::AppHandle;
@@ -117,6 +118,15 @@ pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
     .filter(|path| std::path::Path::new(path).is_file())
     .unwrap_or_else(|| bin_name(tool).to_string());
 
+  let mut parsed_args = shlex::split(args)
+    .ok_or_else(|| AppError::InvalidState("launch args parse failed".to_string()))?;
+  if matches!(tool, ToolType::CodexApp) {
+    let has_app_subcommand = parsed_args.first().map(|x| x == "app").unwrap_or(false);
+    if !has_app_subcommand {
+      parsed_args.insert(0, "app".to_string());
+    }
+  }
+
   #[cfg(target_os = "windows")]
   {
     if !matches!(tool, ToolType::CodexApp) {
@@ -133,8 +143,8 @@ pub fn start_tool(tool: ToolType, args: &str) -> Result<String, AppError> {
   }
 
   let mut cmd = Command::new(&target);
-  if !args.trim().is_empty() {
-    cmd.args(args.split_whitespace());
+  if !parsed_args.is_empty() {
+    cmd.args(parsed_args);
   }
   cmd.spawn()?;
   Ok(format!("{target} started"))

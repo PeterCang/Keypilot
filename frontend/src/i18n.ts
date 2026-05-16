@@ -42,6 +42,8 @@ type Dict = {
   restartedTool: string;
   traySwitched: string;
   installStarted: string;
+  addArg: string;
+  argPresets: string;
 };
 
 export const dictionaries: Record<Locale, Dict> = {
@@ -87,7 +89,9 @@ export const dictionaries: Record<Locale, Dict> = {
     restartedTool: "已执行重启指令",
     traySwitched: "托盘已切换 Key"
     ,
-    installStarted: "开始安装"
+    installStarted: "开始安装",
+    addArg: "添加参数",
+    argPresets: "常用参数"
   },
   "en-US": {
     appTitle: "Keypilot Console",
@@ -130,7 +134,9 @@ export const dictionaries: Record<Locale, Dict> = {
     restartRecommended: "Tool is running, restart is recommended",
     restartedTool: "Restart command has been executed",
     traySwitched: "Key switched from tray",
-    installStarted: "Install started"
+    installStarted: "Install started",
+    addArg: "Add Arg",
+    argPresets: "Common Args"
   }
 };
 
