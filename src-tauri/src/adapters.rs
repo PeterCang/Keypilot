@@ -461,7 +461,7 @@ pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>,
         ToolAuthSnapshot {
           tool,
           method: AuthMethodType::EnvProcess,
-          source: "process_env".to_string(),
+          source: "env".to_string(),
           api_key: process_api_key,
           base_url: process_base_url,
           model: None,
