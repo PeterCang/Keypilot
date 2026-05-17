@@ -24,14 +24,47 @@ fn copy_if_exists(tool: ToolType, source: PathBuf) -> Result<BackupResult, AppEr
     });
   }
 
-  let backup = source.with_extension("bak");
-  fs::copy(&source, &backup)?;
+  let backup = rotate_backups_and_copy_current(&source)?;
   Ok(BackupResult {
     tool,
     backup_path: Some(backup.display().to_string()),
     success: true,
     message: "backup created".to_string(),
   })
+}
+
+fn backup_path_for_index(source: &PathBuf, index: usize) -> PathBuf {
+  let file_name = source
+    .file_name()
+    .map(|name| name.to_string_lossy().to_string())
+    .unwrap_or_else(|| "config".to_string());
+  source.with_file_name(format!("{file_name}.bak{index}"))
+}
+
+fn rotate_backups_and_copy_current(source: &PathBuf) -> Result<PathBuf, AppError> {
+  if !source.exists() {
+    return Err(AppError::InvalidState(format!(
+      "cannot back up missing file: {}",
+      source.display()
+    )));
+  }
+
+  let oldest = backup_path_for_index(source, 5);
+  if oldest.exists() {
+    fs::remove_file(&oldest)?;
+  }
+
+  for index in (1..=4).rev() {
+    let current = backup_path_for_index(source, index);
+    if current.exists() {
+      let next = backup_path_for_index(source, index + 1);
+      fs::rename(current, next)?;
+    }
+  }
+
+  let latest = backup_path_for_index(source, 1);
+  fs::copy(source, &latest)?;
+  Ok(latest)
 }
 
 fn run_command(program: &str, args: &[&str]) -> Result<(), AppError> {
@@ -631,7 +664,7 @@ fn write_claude_settings_json(record: &KeyRecord) -> Result<(), AppError> {
     None
   };
   if settings_path.exists() {
-    fs::copy(&settings_path, settings_path.with_extension("json.bak"))?;
+    rotate_backups_and_copy_current(&settings_path)?;
   }
 
   let mut root = if settings_path.exists() {
@@ -768,10 +801,10 @@ pub fn switch_key_for_record_with_source(
         None
       };
       if auth_path.exists() {
-        fs::copy(&auth_path, auth_path.with_extension("json.bak"))?;
+        rotate_backups_and_copy_current(&auth_path)?;
       }
       if config_path.exists() {
-        fs::copy(&config_path, config_path.with_extension("toml.bak"))?;
+        rotate_backups_and_copy_current(&config_path)?;
       }
 
       let auth_existing = auth_before
@@ -1084,8 +1117,8 @@ mod tests {
     let result = switch_key_for_record(&record).expect("switch failed");
     assert!(result.success);
 
-    let auth_bak = test_home.join(".codex").join("auth.json.bak");
-    let config_bak = test_home.join(".codex").join("config.toml.bak");
+    let auth_bak = test_home.join(".codex").join("auth.json.bak1");
+    let config_bak = test_home.join(".codex").join("config.toml.bak1");
     assert!(auth_bak.exists(), "auth backup should exist");
     assert!(config_bak.exists(), "config backup should exist");
 
@@ -1215,7 +1248,7 @@ wire_api = "responses"
     let result = switch_key_for_record_with_source(&record, &source).expect("switch failed");
     assert!(result.success);
 
-    let backup_path = claude_dir.join("settings.json.bak");
+    let backup_path = claude_dir.join("settings.json.bak1");
     assert!(backup_path.exists(), "settings backup should exist");
     let backup = fs::read_to_string(backup_path).expect("read backup failed");
     assert!(backup.contains("\"ANTHROPIC_AUTH_TOKEN\": \"old\""));
@@ -1233,6 +1266,43 @@ wire_api = "responses"
       Some("https://api.anthropic.com")
     );
     assert_eq!(next["permissions"]["allow"][0].as_str(), Some("Bash(ls *)"));
+  }
+
+  #[test]
+  fn rotated_backups_keep_latest_five_versions() {
+    let test_home = unique_temp_home();
+    fs::create_dir_all(&test_home).expect("failed to create temp dir");
+    let target = test_home.join("config.toml");
+
+    for index in 1..=6 {
+      fs::write(&target, format!("version-{index}")).expect("write target failed");
+      rotate_backups_and_copy_current(&target).expect("backup failed");
+    }
+
+    assert_eq!(
+      fs::read_to_string(test_home.join("config.toml.bak1")).expect("read bak1 failed"),
+      "version-6"
+    );
+    assert_eq!(
+      fs::read_to_string(test_home.join("config.toml.bak2")).expect("read bak2 failed"),
+      "version-5"
+    );
+    assert_eq!(
+      fs::read_to_string(test_home.join("config.toml.bak3")).expect("read bak3 failed"),
+      "version-4"
+    );
+    assert_eq!(
+      fs::read_to_string(test_home.join("config.toml.bak4")).expect("read bak4 failed"),
+      "version-3"
+    );
+    assert_eq!(
+      fs::read_to_string(test_home.join("config.toml.bak5")).expect("read bak5 failed"),
+      "version-2"
+    );
+    assert!(
+      !test_home.join("config.toml.bak6").exists(),
+      "only five backups should be retained"
+    );
   }
 
   #[test]
