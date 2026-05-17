@@ -5,13 +5,17 @@ mod models;
 mod process;
 mod storage;
 
-use adapters::{backup_config_for_tool, detect_tool_auth_methods, read_current_tool_config, switch_key_for_record};
+use adapters::{
+  backup_config_for_tool, detect_tool_auth_methods, read_current_tool_config, switch_key_for_record_with_source,
+};
+use chrono::Utc;
 use models::{BackupResult, KeyRecord, SwitchResult, ToolAuthSnapshot, ToolCurrentConfig, ToolStatus, ToolType};
 use storage::{load_state, save_state};
 use tauri::Emitter;
 use tauri::Manager;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
+use uuid::Uuid;
 
 #[tauri::command]
 fn list_keys() -> Result<Vec<KeyRecord>, String> {
@@ -48,6 +52,33 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> Result<(), String> {
   let menu = build_tray_menu(app)?;
   let tray = app.tray_by_id("main-tray").ok_or_else(|| "main tray not found".to_string())?;
   tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+}
+
+fn import_current_key_if_missing(state: &mut storage::AppState, tool: ToolType, current: &ToolCurrentConfig) {
+  let Some(api_key) = current.api_key.as_ref().map(|v| v.trim()).filter(|v| !v.is_empty()) else {
+    return;
+  };
+  let exists = state
+    .keys
+    .iter()
+    .any(|item| item.tool == tool && item.api_key.trim() == api_key);
+  if exists {
+    return;
+  }
+
+  let now = Utc::now().to_rfc3339();
+  state.keys.push(KeyRecord {
+    id: Uuid::new_v4().to_string(),
+    name: format!("imported-{}-{}", tool_label(tool), &now[0..19].replace('T', " ")),
+    tool,
+    api_key: api_key.to_string(),
+    base_url: current.base_url.clone(),
+    model: current.model.clone(),
+    is_active: false,
+    created_at: now.clone(),
+    updated_at: Some(now),
+    note: Some(format!("Imported from current config: {}", current.source)),
+  });
 }
 
 #[tauri::command]
@@ -92,7 +123,11 @@ fn switch_key(app: tauri::AppHandle, id: String) -> Result<SwitchResult, String>
     .cloned()
     .ok_or_else(|| "key not found".to_string())?;
 
-  let mut result = switch_key_for_record(&target).map_err(|e| e.to_string())?;
+  let current = read_current_tool_config(target.tool).map_err(|e| e.to_string())?;
+  import_current_key_if_missing(&mut state, target.tool, &current);
+
+  let mut result =
+    switch_key_for_record_with_source(&target, &current.source).map_err(|e| e.to_string())?;
   let running = process::is_tool_running(target.tool);
   result.requires_restart = running;
   result.warning = if running {
@@ -185,7 +220,15 @@ pub fn run() {
           if let Some(key_id) = id.strip_prefix("switch:") {
             if let Ok(mut state) = load_state() {
               if let Some(target) = state.keys.iter().find(|k| k.id == key_id).cloned() {
-                if switch_key_for_record(&target).is_ok() {
+                let current = read_current_tool_config(target.tool).unwrap_or(ToolCurrentConfig {
+                  tool: target.tool,
+                  api_key: None,
+                  base_url: None,
+                  model: None,
+                  source: "none".to_string(),
+                });
+                import_current_key_if_missing(&mut state, target.tool, &current);
+                if switch_key_for_record_with_source(&target, &current.source).is_ok() {
                   for item in &mut state.keys {
                     if item.tool == target.tool {
                       item.is_active = item.id == target.id;

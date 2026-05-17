@@ -346,6 +346,63 @@ fn read_claude_settings_json(home: &PathBuf) -> Result<(Option<String>, Option<S
   Ok((api_key, base_url))
 }
 
+fn write_claude_settings_json(record: &KeyRecord) -> Result<(), AppError> {
+  let home = user_home()?;
+  let claude_dir = home.join(".claude");
+  fs::create_dir_all(&claude_dir)?;
+  let settings_path = claude_dir.join("settings.json");
+
+  let mut root = if settings_path.exists() {
+    let content = fs::read_to_string(&settings_path)?;
+    serde_json::from_str::<serde_json::Value>(&content)?
+  } else {
+    serde_json::json!({})
+  };
+
+  if !root.is_object() {
+    root = serde_json::json!({});
+  }
+  let obj = root
+    .as_object_mut()
+    .ok_or_else(|| AppError::InvalidState("invalid claude settings root object".to_string()))?;
+
+  let env_value = obj.entry("env").or_insert_with(|| serde_json::json!({}));
+  if !env_value.is_object() {
+    *env_value = serde_json::json!({});
+  }
+
+  let env_obj = env_value
+    .as_object_mut()
+    .ok_or_else(|| AppError::InvalidState("invalid claude settings env object".to_string()))?;
+  env_obj.insert(
+    "ANTHROPIC_AUTH_TOKEN".to_string(),
+    serde_json::Value::String(record.api_key.clone()),
+  );
+  env_obj.remove("ANTHROPIC_API_KEY");
+  match record.base_url.as_deref() {
+    Some(v) if !v.trim().is_empty() => {
+      env_obj.insert(
+        "ANTHROPIC_BASE_URL".to_string(),
+        serde_json::Value::String(v.to_string()),
+      );
+    }
+    _ => {
+      env_obj.remove("ANTHROPIC_BASE_URL");
+    }
+  }
+
+  let body = serde_json::to_vec_pretty(&root)?;
+  write_atomic(&settings_path, &body)?;
+
+  let (api_key, base_url) = read_claude_settings_json(&home)?;
+  if api_key.as_deref() != Some(record.api_key.as_str()) || base_url != record.base_url {
+    return Err(AppError::InvalidState(
+      "claude settings.json verification failed".to_string(),
+    ));
+  }
+  Ok(())
+}
+
 pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> {
   let home = user_home()?;
   match tool {
@@ -365,13 +422,23 @@ pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> 
   }
 }
 
+#[allow(dead_code)]
 pub fn switch_key_for_record(record: &KeyRecord) -> Result<SwitchResult, AppError> {
+  switch_key_for_record_with_source(record, "env")
+}
+
+pub fn switch_key_for_record_with_source(record: &KeyRecord, current_source: &str) -> Result<SwitchResult, AppError> {
   match record.tool {
     ToolType::ClaudeCode => {
-      switch_env_with_rollback(&[
-        ("ANTHROPIC_AUTH_TOKEN", Some(record.api_key.as_str())),
-        ("ANTHROPIC_BASE_URL", record.base_url.as_deref()),
-      ])?;
+      let source = current_source.to_ascii_lowercase();
+      if source.ends_with(".claude\\settings.json") || source.ends_with(".claude/settings.json") {
+        write_claude_settings_json(record)?;
+      } else {
+        switch_env_with_rollback(&[
+          ("ANTHROPIC_AUTH_TOKEN", Some(record.api_key.as_str())),
+          ("ANTHROPIC_BASE_URL", record.base_url.as_deref()),
+        ])?;
+      }
       Ok(SwitchResult {
         success: true,
         warning: None,
