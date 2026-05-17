@@ -42,21 +42,35 @@ function App() {
 
   const t = dictionaries[locale];
 
-  const reload = async () => {
-    const [k, tStatus] = await Promise.all([listKeys(), detectTools()]);
-    setKeys(k);
+  const reloadKeys = async (tool?: ToolType) => {
+    const allKeys = await listKeys();
+    const targetTool = tool ?? selectedTool;
+    setKeys(allKeys.filter((item) => item.tool === targetTool));
+  };
+
+  const reloadTools = async () => {
+    const tStatus = await detectTools();
     setTools(tStatus);
   };
 
+  const reloadAll = async (tool?: ToolType) => {
+    await Promise.all([reloadKeys(tool), reloadTools()]);
+  };
+
   useEffect(() => {
-    reload().catch((err) => setLog(`${t.initFailed}: ${String(err)}`));
+    reloadAll(selectedTool).catch((err) => setLog(`${t.initFailed}: ${String(err)}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    reloadKeys(selectedTool).catch((err) => setLog(`${t.initFailed}: ${String(err)}`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTool]);
+
+  useEffect(() => {
     const unlistenPromise = listen<string>("key-switched", async (event) => {
       setLog(`${t.traySwitched}: ${event.payload}`);
-      await reload();
+      await reloadAll(selectedTool);
     });
     const installLogUnlistenPromise = listen<string>("install-log", (event) => {
       setLog((prev) => `${prev}\n${event.payload}`);
@@ -104,9 +118,9 @@ function App() {
     };
     await saveKey(payload);
     setLog(`${t.savedKey}: ${payload.name}`);
-    setDraft(emptyDraft);
+    setDraft({ ...emptyDraft, tool: selectedTool });
     setShowAddModal(false);
-    await reload();
+    await reloadAll(selectedTool);
   };
 
   const handleSwitch = async (key: KeyRecord, withRestart: boolean) => {
@@ -120,7 +134,7 @@ function App() {
       }
     }
     setLog(nextLog);
-    await reload();
+    await reloadAll(selectedTool);
   };
 
   const selectedToolStatus = useMemo(() => {
@@ -243,7 +257,7 @@ function App() {
                 setLog(`${t.installStarted}: ${selectedTool}`);
                 const result = await installTool(selectedTool);
                 setLog(result);
-                await reload();
+                await reloadAll(selectedTool);
               }}
             >
               {t.installTool}
@@ -319,7 +333,7 @@ function App() {
                 onClick={async () => {
                   const result = await uninstallTool(selectedTool);
                   setLog(result);
-                  await reload();
+                  await reloadAll(selectedTool);
                 }}
               >
                 {t.uninstallTool}
@@ -335,7 +349,7 @@ function App() {
           <button
             className="plus-button"
             onClick={() => {
-              setDraft(emptyDraft);
+              setDraft({ ...emptyDraft, tool: selectedTool });
               setShowAddModal(true);
             }}
             aria-label={t.saveKey}
@@ -368,7 +382,7 @@ function App() {
                 onClick={async () => {
                   await deleteKey(key.id);
                   setLog(`${t.deletedKey}: ${key.name}`);
-                  await reload();
+                  await reloadAll(selectedTool);
                 }}
               >
                 {t.delete}
