@@ -471,12 +471,11 @@ function App() {
                   <div className="row">
                     <strong>{key.name}</strong>
                     <span className="tag">{key.tool}</span>
-                    {key.isActive ? <span className="tag">{t.active}</span> : null}
                   </div>
                   <div>{t.apiKey}: {key.apiKey}</div>
                   <div>{t.baseUrl}: {key.baseUrl || "-"}</div>
                   {key.model ? <div>{t.model}: {key.model}</div> : null}
-                  {!key.isActive ? <div>{t.remark}: {key.note || "-"}</div> : null}
+                  <div>{t.remark}: {key.note || "-"}</div>
                 </div>
                 <div className="key-item-actions">
                   <button
