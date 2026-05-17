@@ -53,6 +53,30 @@ enum WindowsEnvScope {
 }
 
 #[cfg(target_os = "windows")]
+fn verify_scope_env_var(scope: WindowsEnvScope, key: &str, value: Option<&str>) -> Result<(), AppError> {
+  let actual = match scope {
+    WindowsEnvScope::User => read_registry_env_var("HKCU\\Environment", key)?,
+    WindowsEnvScope::Machine => read_registry_env_var(
+      "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+      key,
+    )?,
+  };
+  let expected = value.map(|v| v.to_string());
+  if actual != expected {
+    return Err(AppError::InvalidState(format!(
+      "env verify failed for {key} in {:?} scope: expected {:?}, got {:?}",
+      match scope {
+        WindowsEnvScope::User => "user",
+        WindowsEnvScope::Machine => "machine",
+      },
+      expected,
+      actual
+    )));
+  }
+  Ok(())
+}
+
+#[cfg(target_os = "windows")]
 fn persist_user_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> {
   match value {
     Some(v) => run_command(
@@ -133,6 +157,7 @@ fn read_registry_env_var(scope_key: &str, key: &str) -> Result<Option<String>, A
 }
 
 #[cfg(target_os = "windows")]
+#[allow(dead_code)]
 fn read_user_env_var(key: &str) -> Result<Option<String>, AppError> {
   read_registry_env_var("HKCU\\Environment", key)
 }
@@ -217,27 +242,14 @@ fn set_and_verify_env_var(key: &str, value: Option<&str>) -> Result<(), AppError
     match scope {
       WindowsEnvScope::User => {
         persist_user_env_var(key, value)?;
-        let actual = read_registry_env_var("HKCU\\Environment", key)?;
-        let expected = value.map(|v| v.to_string());
-        if actual != expected {
-          return Err(AppError::InvalidState(format!(
-            "env verify failed for {key} in user scope: expected {:?}, got {:?}",
-            expected, actual
-          )));
-        }
+        verify_scope_env_var(WindowsEnvScope::User, key, value)?;
       }
       WindowsEnvScope::Machine => {
-        persist_machine_env_var(key, value)?;
-        let actual = read_registry_env_var(
-          "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
-          key,
-        )?;
-        let expected = value.map(|v| v.to_string());
-        if actual != expected {
-          return Err(AppError::InvalidState(format!(
-            "env verify failed for {key} in machine scope: expected {:?}, got {:?}",
-            expected, actual
-          )));
+        if persist_machine_env_var(key, value).is_ok() {
+          verify_scope_env_var(WindowsEnvScope::Machine, key, value)?;
+        } else {
+          persist_user_env_var(key, value)?;
+          verify_scope_env_var(WindowsEnvScope::User, key, value)?;
         }
       }
     }
@@ -270,15 +282,39 @@ fn set_and_verify_env_var(key: &str, value: Option<&str>) -> Result<(), AppError
 }
 
 fn switch_env_with_rollback(changes: &[(&str, Option<&str>)]) -> Result<(), AppError> {
+  #[cfg(target_os = "windows")]
+  let mut applied: Vec<(&str, Option<String>, Option<String>)> = Vec::new();
+  #[cfg(not(target_os = "windows"))]
   let mut applied: Vec<(&str, Option<String>)> = Vec::new();
+
   for (key, value) in changes {
+    #[cfg(target_os = "windows")]
+    let before_user = read_registry_env_var("HKCU\\Environment", key)?;
+    #[cfg(target_os = "windows")]
+    let before_machine =
+      read_registry_env_var("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", key)?;
+    #[cfg(not(target_os = "windows"))]
     let before = read_user_env_var(key)?;
+
     if let Err(e) = set_and_verify_env_var(key, *value) {
+      #[cfg(target_os = "windows")]
+      {
+        for (rollback_key, user_before, machine_before) in applied.iter().rev() {
+          let _ = persist_user_env_var(rollback_key, user_before.as_deref());
+          let _ = persist_machine_env_var(rollback_key, machine_before.as_deref());
+        }
+      }
+      #[cfg(not(target_os = "windows"))]
+      {
       for (rollback_key, rollback_value) in applied.iter().rev() {
         let _ = set_and_verify_env_var(rollback_key, rollback_value.as_deref());
       }
+      }
       return Err(e);
     }
+    #[cfg(target_os = "windows")]
+    applied.push((key, before_user, before_machine));
+    #[cfg(not(target_os = "windows"))]
     applied.push((key, before));
   }
   Ok(())
