@@ -39,6 +39,7 @@ export interface ToolCurrentConfig {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  providerName?: string;
   source: string;
 }
 

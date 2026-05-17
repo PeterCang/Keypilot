@@ -58,6 +58,7 @@ pub struct ToolCurrentConfig {
   pub api_key: Option<String>,
   pub base_url: Option<String>,
   pub model: Option<String>,
+  pub provider_name: Option<String>,
   pub source: String,
 }
 

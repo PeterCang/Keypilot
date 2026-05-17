@@ -361,22 +361,67 @@ fn toml_escape(value: &str) -> String {
   value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn codex_provider_name(record: &KeyRecord) -> String {
+fn codex_provider_name(record: &KeyRecord) -> Option<String> {
   record
     .note
     .as_deref()
     .map(str::trim)
     .filter(|x| !x.is_empty())
+    .filter(|x| !x.starts_with("Imported from current config:"))
+    .map(|x| x.to_string())
+}
+
+fn fallback_codex_provider_name(record: &KeyRecord) -> String {
+  codex_provider_name(record)
     .or_else(|| {
       let name = record.name.trim();
       if name.is_empty() {
         None
       } else {
-        Some(name)
+        Some(name.to_string())
       }
     })
-    .unwrap_or("openai")
-    .to_string()
+    .unwrap_or_else(|| "openai".to_string())
+}
+
+fn find_codex_provider_by_base_url(content: &str, base_url: &str) -> Option<String> {
+  let mut current_provider: Option<String> = None;
+  for raw_line in content.lines() {
+    let line = raw_line.trim();
+    if line.starts_with("[model_providers.") && line.ends_with(']') {
+      let name = line
+        .trim_start_matches("[model_providers.")
+        .trim_end_matches(']')
+        .trim_matches('"')
+        .to_string();
+      current_provider = if name.is_empty() { None } else { Some(name) };
+      continue;
+    }
+    if is_toml_key_line(line, "base_url") {
+      let value = parse_toml_string_value(line, "base_url");
+      if value.as_deref() == Some(base_url) {
+        return current_provider;
+      }
+    }
+  }
+  None
+}
+
+fn codex_provider_name_for_config(existing: &str, record: &KeyRecord) -> String {
+  if let Some(provider) = codex_provider_name(record) {
+    return provider;
+  }
+  if let Some(base_url) = record
+    .base_url
+    .as_deref()
+    .map(str::trim)
+    .filter(|x| !x.is_empty())
+  {
+    if let Some(provider) = find_codex_provider_by_base_url(existing, base_url) {
+      return provider;
+    }
+  }
+  fallback_codex_provider_name(record)
 }
 
 fn is_toml_key_line(line: &str, key: &str) -> bool {
@@ -469,8 +514,9 @@ fn join_toml_lines(lines: Vec<String>, trailing_newline: bool) -> String {
 }
 
 fn update_codex_config_toml(existing: Option<&str>, record: &KeyRecord) -> String {
-  let provider = codex_provider_name(record);
-  let mut content = existing.unwrap_or("").to_string();
+  let existing = existing.unwrap_or("");
+  let provider = codex_provider_name_for_config(existing, record);
+  let mut content = existing.to_string();
 
   content = replace_or_insert_top_level_string(&content, "model_provider", &provider);
 
@@ -576,24 +622,30 @@ fn parse_toml_string_value_in_section(content: &str, section: &str, key: &str) -
   None
 }
 
-fn read_codex_config_values(
-  config_path: &PathBuf,
-) -> Result<(Option<String>, Option<String>), AppError> {
-  if !config_path.exists() {
-    return Ok((None, None));
-  }
-  let content = fs::read_to_string(config_path)?;
-  let model = parse_toml_string_value(&content, "model");
-  let model_provider = parse_toml_string_value(&content, "model_provider");
+fn read_codex_config_values_from_content(
+  content: &str,
+) -> (Option<String>, Option<String>, Option<String>) {
+  let model = parse_toml_string_value(content, "model");
+  let model_provider = parse_toml_string_value(content, "model_provider");
 
-  let base_url = if let Some(provider) = model_provider {
-    parse_toml_string_value_in_section(&content, &format!("model_providers.{provider}"), "base_url")
-      .or_else(|| parse_toml_string_value(&content, "base_url"))
+  let base_url = if let Some(provider) = model_provider.as_deref() {
+    parse_toml_string_value_in_section(content, &format!("model_providers.{provider}"), "base_url")
+      .or_else(|| parse_toml_string_value(content, "base_url"))
   } else {
-    parse_toml_string_value(&content, "base_url")
+    parse_toml_string_value(content, "base_url")
   };
 
-  Ok((base_url, model))
+  (model_provider, base_url, model)
+}
+
+fn read_codex_config_values(
+  config_path: &PathBuf,
+) -> Result<(Option<String>, Option<String>, Option<String>), AppError> {
+  if !config_path.exists() {
+    return Ok((None, None, None));
+  }
+  let content = fs::read_to_string(config_path)?;
+  Ok(read_codex_config_values_from_content(&content))
 }
 
 fn resolve_effective_snapshot(mut snapshots: Vec<ToolAuthSnapshot>) -> Vec<ToolAuthSnapshot> {
@@ -616,6 +668,7 @@ fn to_current_config(tool: ToolType, snapshots: &[ToolAuthSnapshot]) -> ToolCurr
       api_key: effective.api_key.clone(),
       base_url: effective.base_url.clone(),
       model: effective.model.clone(),
+      provider_name: None,
       source: effective.source.clone(),
     };
   }
@@ -624,6 +677,7 @@ fn to_current_config(tool: ToolType, snapshots: &[ToolAuthSnapshot]) -> ToolCurr
     api_key: None,
     base_url: None,
     model: None,
+    provider_name: None,
     source: "none".to_string(),
   }
 }
@@ -835,7 +889,7 @@ pub fn switch_key_for_record_with_source(
       let auth_actual = fs::read_to_string(&auth_path)?;
       let config_actual = fs::read_to_string(&config_path)?;
       let auth_ok = auth_actual.contains("OPENAI_API_KEY") && auth_actual.contains(&record.api_key);
-      let provider = codex_provider_name(record);
+      let provider = codex_provider_name_for_config(config_existing.unwrap_or(""), record);
       let config_ok = parse_toml_string_value(&config_actual, "model_provider").as_deref()
         == Some(provider.as_str())
         && parse_toml_string_value_in_section(
@@ -864,6 +918,32 @@ pub fn switch_key_for_record_with_source(
 }
 
 pub fn read_current_tool_config(tool: ToolType) -> Result<ToolCurrentConfig, AppError> {
+  if matches!(tool, ToolType::Codex | ToolType::CodexApp) {
+    let home = user_home()?;
+    let codex_dir = home.join(".codex");
+    let auth_path = codex_dir.join("auth.json");
+    let config_path = codex_dir.join("config.toml");
+    let api_key = if auth_path.exists() {
+      let content = fs::read_to_string(&auth_path)?;
+      let json: serde_json::Value = serde_json::from_str(&content)?;
+      json
+        .get("OPENAI_API_KEY")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+    } else {
+      None
+    };
+    let (provider_name, base_url, model) = read_codex_config_values(&config_path)?;
+    return Ok(ToolCurrentConfig {
+      tool,
+      api_key,
+      base_url,
+      model,
+      provider_name,
+      source: format!("{} + {}", auth_path.display(), config_path.display()),
+    });
+  }
+
   let snapshots = detect_tool_auth_methods(tool)?;
   Ok(to_current_config(tool, &snapshots))
 }
@@ -979,6 +1059,7 @@ pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>,
       api_key: read_effective_env_var("GEMINI_API_KEY")?,
       base_url: read_effective_env_var("GOOGLE_GEMINI_BASE_URL")?,
       model: read_effective_env_var("GEMINI_MODEL")?,
+      provider_name: None,
       source: "env".to_string(),
     })
     .map(|cfg| {
@@ -1010,7 +1091,7 @@ pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>,
         None
       };
 
-      let (base_url, model) = read_codex_config_values(&config_path)?;
+      let (_provider_name, base_url, model) = read_codex_config_values(&config_path)?;
 
       Ok(vec![ToolAuthSnapshot {
         tool,
@@ -1208,6 +1289,60 @@ wire_api = "responses"
   }
 
   #[test]
+  fn switch_codex_imported_key_reuses_existing_provider_by_base_url() {
+    let _guard = env_lock().lock().expect("lock poisoned");
+    let test_home = unique_temp_home();
+    fs::create_dir_all(test_home.join(".codex")).expect("failed to create codex dir");
+    std::env::set_var("HOME", &test_home);
+    std::env::set_var("USERPROFILE", &test_home);
+
+    let auth_path = test_home.join(".codex").join("auth.json");
+    let config_path = test_home.join(".codex").join("config.toml");
+    fs::write(&auth_path, r#"{"OPENAI_API_KEY":"sk-current"}"#).expect("seed auth failed");
+    fs::write(
+      &config_path,
+      r#"model_provider = "other"
+model = "gpt-5.4"
+
+[model_providers.gac]
+name = "gac"
+base_url = "https://gaccode.com/codex/v1"
+wire_api = "responses"
+
+[model_providers.other]
+name = "other"
+base_url = "https://other.example/v1"
+wire_api = "responses"
+"#,
+    )
+    .expect("seed config failed");
+
+    let record = KeyRecord {
+      id: "c6".to_string(),
+      name: "imported-codex-2026-05-17".to_string(),
+      tool: ToolType::Codex,
+      api_key: "sk-old".to_string(),
+      base_url: Some("https://gaccode.com/codex/v1".to_string()),
+      model: Some("gpt-5.3-codex".to_string()),
+      is_active: false,
+      created_at: "2026-01-01T00:00:00Z".to_string(),
+      updated_at: None,
+      note: Some(format!(
+        "Imported from current config: {} + {}",
+        auth_path.display(),
+        config_path.display()
+      )),
+    };
+
+    let result = switch_key_for_record(&record).expect("switch failed");
+    assert!(result.success);
+
+    let config_new = fs::read_to_string(config_path).expect("read config failed");
+    assert!(config_new.contains("model_provider = \"gac\""));
+    assert!(!config_new.contains("model_provider = \"imported-codex-2026-05-17\""));
+  }
+
+  #[test]
   fn switch_claude_settings_json_creates_backup_and_preserves_other_values() {
     let _guard = env_lock().lock().expect("lock poisoned");
     let test_home = unique_temp_home();
@@ -1335,6 +1470,7 @@ requires_openai_auth = true
 
     let cfg = read_current_tool_config(ToolType::Codex).expect("read codex config failed");
     assert_eq!(cfg.api_key.as_deref(), Some("sk-codex-provider"));
+    assert_eq!(cfg.provider_name.as_deref(), Some("aipor"));
     assert_eq!(cfg.model.as_deref(), Some("gpt-5"));
     assert_eq!(cfg.base_url.as_deref(), Some("https://code.aipor.cc"));
   }

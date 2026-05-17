@@ -77,7 +77,11 @@ fn import_current_key_if_missing(state: &mut storage::AppState, tool: ToolType, 
     is_active: false,
     created_at: now.clone(),
     updated_at: Some(now),
-    note: Some(format!("Imported from current config: {}", current.source)),
+    note: current
+      .provider_name
+      .clone()
+      .filter(|value| !value.trim().is_empty())
+      .or_else(|| Some(format!("Imported from current config: {}", current.source))),
   });
 }
 
@@ -225,6 +229,7 @@ pub fn run() {
                   api_key: None,
                   base_url: None,
                   model: None,
+                  provider_name: None,
                   source: "none".to_string(),
                 });
                 import_current_key_if_missing(&mut state, target.tool, &current);
