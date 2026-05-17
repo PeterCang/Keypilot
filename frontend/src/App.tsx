@@ -71,7 +71,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    reloadKeys(selectedTool).catch((err) => setLog(`${t.initFailed}: ${String(err)}`));
+    reloadAll(selectedTool).catch((err) => setLog(`${t.initFailed}: ${String(err)}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTool]);
 
