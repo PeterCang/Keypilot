@@ -27,6 +27,7 @@ type Dict = {
   apiKey: string;
   baseUrl: string;
   model: string;
+  optional: string;
   note: string;
   remark: string;
   saveKey: string;
@@ -81,6 +82,7 @@ export const dictionaries: Record<Locale, Dict> = {
     apiKey: "API Key",
     baseUrl: "Base URL",
     model: "Model",
+    optional: "可选",
     note: "备注",
     remark: "Remark",
     saveKey: "保存 Key",
@@ -134,6 +136,7 @@ export const dictionaries: Record<Locale, Dict> = {
     apiKey: "API Key",
     baseUrl: "Base URL",
     model: "Model",
+    optional: "Optional",
     note: "Note",
     remark: "Remark",
     saveKey: "Save Key",

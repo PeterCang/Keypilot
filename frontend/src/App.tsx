@@ -65,10 +65,6 @@ function App() {
     });
   };
 
-  const getPreferredBaseUrl = (tool: ToolType) => {
-    return (baseUrlHistory[tool] ?? [])[0] ?? "";
-  };
-
   const reloadKeys = async (tool?: ToolType) => {
     const allKeys = await listKeys();
     const targetTool = tool ?? selectedTool;
@@ -410,7 +406,7 @@ function App() {
           <button
             className="plus-button"
             onClick={() => {
-              setDraft({ ...emptyDraft, tool: selectedTool, baseUrl: getPreferredBaseUrl(selectedTool) });
+              setDraft({ ...emptyDraft, tool: selectedTool, baseUrl: "" });
               setShowAddModal(true);
             }}
             aria-label={t.saveKey}
@@ -500,7 +496,7 @@ function App() {
                 </datalist>
               </label>
               <label>
-                {t.model}
+                {`${t.model} (${t.optional})`}
                 <input value={draft.model || ""} onChange={(e) => setDraft({ ...draft, model: e.target.value })} />
               </label>
               <label>
