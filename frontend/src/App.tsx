@@ -16,6 +16,9 @@ import {
 import { dictionaries, resolveLocale, type Locale } from "./i18n";
 import type { KeyRecord, ToolCurrentConfig, ToolStatus, ToolType } from "./types";
 
+const BASE_URL_HISTORY_STORAGE_KEY = "keypilot.base_url_history";
+const MAX_BASE_URL_HISTORY = 10;
+
 const emptyDraft: KeyRecord = {
   id: "",
   name: "",
@@ -41,9 +44,30 @@ function App() {
   const [showArgMenu, setShowArgMenu] = useState(false);
   const argMenuWrapRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<KeyRecord>(emptyDraft);
+  const [baseUrlHistory, setBaseUrlHistory] = useState<Partial<Record<ToolType, string[]>>>({});
   const [log, setLog] = useState(dictionaries[locale].ready);
 
   const t = dictionaries[locale];
+
+  const persistBaseUrlHistory = (next: Partial<Record<ToolType, string[]>>) => {
+    setBaseUrlHistory(next);
+    localStorage.setItem(BASE_URL_HISTORY_STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const saveBaseUrlToHistory = (tool: ToolType, baseUrl?: string) => {
+    const normalized = (baseUrl ?? "").trim();
+    if (!normalized) return;
+    const previous = baseUrlHistory[tool] ?? [];
+    const deduped = [normalized, ...previous.filter((item) => item !== normalized)].slice(0, MAX_BASE_URL_HISTORY);
+    persistBaseUrlHistory({
+      ...baseUrlHistory,
+      [tool]: deduped
+    });
+  };
+
+  const getPreferredBaseUrl = (tool: ToolType) => {
+    return (baseUrlHistory[tool] ?? [])[0] ?? "";
+  };
 
   const reloadKeys = async (tool?: ToolType) => {
     const allKeys = await listKeys();
@@ -65,6 +89,17 @@ function App() {
   const reloadAll = async (tool?: ToolType) => {
     await Promise.all([reloadKeys(tool), reloadTools(), reloadCurrentToolConfig(tool)]);
   };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(BASE_URL_HISTORY_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<Record<ToolType, string[]>>;
+      setBaseUrlHistory(parsed);
+    } catch {
+      localStorage.removeItem(BASE_URL_HISTORY_STORAGE_KEY);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +173,7 @@ function App() {
       updatedAt: now
     };
     await saveKey(payload);
+    saveBaseUrlToHistory(selectedTool, payload.baseUrl);
     setLog(`${t.savedKey}: ${payload.name}`);
     setDraft({ ...emptyDraft, tool: selectedTool });
     setShowAddModal(false);
@@ -242,6 +278,10 @@ function App() {
     });
     setShowArgMenu(false);
   };
+
+  const baseUrlSuggestions = useMemo(() => {
+    return baseUrlHistory[selectedTool] ?? [];
+  }, [baseUrlHistory, selectedTool]);
 
   return (
     <div className="app">
@@ -370,7 +410,7 @@ function App() {
           <button
             className="plus-button"
             onClick={() => {
-              setDraft({ ...emptyDraft, tool: selectedTool });
+              setDraft({ ...emptyDraft, tool: selectedTool, baseUrl: getPreferredBaseUrl(selectedTool) });
               setShowAddModal(true);
             }}
             aria-label={t.saveKey}
@@ -447,7 +487,17 @@ function App() {
               </label>
               <label>
                 {t.baseUrl}
-                <input value={draft.baseUrl || ""} onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })} />
+                <input
+                  list={`base-url-history-${selectedTool}`}
+                  value={draft.baseUrl || ""}
+                  onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })}
+                  onBlur={() => saveBaseUrlToHistory(selectedTool, draft.baseUrl)}
+                />
+                <datalist id={`base-url-history-${selectedTool}`}>
+                  {baseUrlSuggestions.map((url) => (
+                    <option key={url} value={url} />
+                  ))}
+                </datalist>
               </label>
               <label>
                 {t.model}
