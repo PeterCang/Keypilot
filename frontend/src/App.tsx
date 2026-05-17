@@ -230,12 +230,6 @@ function App() {
     setShowArgMenu(false);
   };
 
-  const maskKey = (value?: string) => {
-    if (!value) return "";
-    if (value.length <= 8) return "****";
-    return `${value.slice(0, 4)}...${value.slice(-4)}`;
-  };
-
   return (
     <div className="app">
       <div className="row head-row">
@@ -378,9 +372,9 @@ function App() {
           </div>
           {currentToolConfig?.apiKey ? (
             <>
-              <div>{t.apiKey}: {maskKey(currentToolConfig.apiKey)}</div>
               <div>{t.currentConfigFromTool}: {currentToolConfig.source}</div>
-              {currentToolConfig.baseUrl ? <div>{t.baseUrl}: {currentToolConfig.baseUrl}</div> : null}
+              <div>{t.apiKey}: {currentToolConfig.apiKey}</div>
+              <div>{t.baseUrl}: {currentToolConfig.baseUrl || "-"}</div>
               {currentToolConfig.model ? <div>{t.model}: {currentToolConfig.model}</div> : null}
             </>
           ) : (
