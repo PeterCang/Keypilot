@@ -45,6 +45,7 @@ function App() {
   const argMenuWrapRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<KeyRecord>(emptyDraft);
   const [baseUrlHistory, setBaseUrlHistory] = useState<Partial<Record<ToolType, string[]>>>({});
+  const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null);
   const [log, setLog] = useState(dictionaries[locale].ready);
 
   const t = dictionaries[locale];
@@ -459,18 +460,27 @@ function App() {
                   {!key.isActive ? <div>{t.remark}: {key.note || "-"}</div> : null}
                 </div>
                 <div className="key-item-actions">
-                  <button onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}>
+                  <button
+                    disabled={deletingKeyId === key.id}
+                    onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}
+                  >
                     {t.switchKey}
                   </button>
                   <button
                     className="danger"
+                    disabled={deletingKeyId === key.id}
                     onClick={async () => {
-                      await deleteKey(key.id);
-                      setLog(`${t.deletedKey}: ${key.name}`);
-                      await reloadAll(selectedTool);
+                      try {
+                        setDeletingKeyId(key.id);
+                        await deleteKey(key.id);
+                        setLog(`${t.deletedKey}: ${key.name}`);
+                        await reloadAll(selectedTool);
+                      } finally {
+                        setDeletingKeyId(null);
+                      }
                     }}
                   >
-                    {t.delete}
+                    {deletingKeyId === key.id ? `${dictionaries["en-US"].deleting}（${dictionaries["zh-CN"].deleting}）` : t.delete}
                   </button>
                 </div>
               </div>

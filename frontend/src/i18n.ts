@@ -39,6 +39,7 @@ type Dict = {
   switchAndRestart: string;
   edit: string;
   delete: string;
+  deleting: string;
   log: string;
   savedKey: string;
   deletedKey: string;
@@ -95,6 +96,7 @@ export const dictionaries: Record<Locale, Dict> = {
     switchAndRestart: "切换并重启",
     edit: "编辑",
     delete: "删除",
+    deleting: "删除中",
     log: "日志",
     savedKey: "已保存 Key",
     deletedKey: "已删除 Key",
@@ -150,6 +152,7 @@ export const dictionaries: Record<Locale, Dict> = {
     switchAndRestart: "Switch + Restart",
     edit: "Edit",
     delete: "Delete",
+    deleting: "Deleting",
     log: "Log",
     savedKey: "Saved key",
     deletedKey: "Deleted key",
