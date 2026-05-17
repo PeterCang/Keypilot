@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::models::{
-  AuthMethodType, BackupResult, KeyRecord, SwitchResult, ToolAuthSnapshot, ToolCurrentConfig, ToolType,
+  AuthMethodType, BackupResult, KeyRecord, SwitchResult, ToolAuthSnapshot, ToolCurrentConfig,
+  ToolType,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -53,7 +54,11 @@ enum WindowsEnvScope {
 }
 
 #[cfg(target_os = "windows")]
-fn verify_scope_env_var(scope: WindowsEnvScope, key: &str, value: Option<&str>) -> Result<(), AppError> {
+fn verify_scope_env_var(
+  scope: WindowsEnvScope,
+  key: &str,
+  value: Option<&str>,
+) -> Result<(), AppError> {
   let actual = match scope {
     WindowsEnvScope::User => read_registry_env_var("HKCU\\Environment", key)?,
     WindowsEnvScope::Machine => read_registry_env_var(
@@ -93,10 +98,7 @@ fn persist_user_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> 
         "/f",
       ],
     ),
-    None => run_command(
-      "reg",
-      &["delete", "HKCU\\Environment", "/v", key, "/f"],
-    ),
+    None => run_command("reg", &["delete", "HKCU\\Environment", "/v", key, "/f"]),
   }
 }
 
@@ -263,21 +265,21 @@ fn set_and_verify_env_var(key: &str, value: Option<&str>) -> Result<(), AppError
 
   #[cfg(not(target_os = "windows"))]
   {
-  persist_user_env_var(key, value)?;
-  let actual = read_user_env_var(key)?;
-  let expected = value.map(|v| v.to_string());
-  if actual != expected {
-    return Err(AppError::InvalidState(format!(
-      "env verify failed for {key}: expected {:?}, got {:?}",
-      expected, actual
-    )));
-  }
+    persist_user_env_var(key, value)?;
+    let actual = read_user_env_var(key)?;
+    let expected = value.map(|v| v.to_string());
+    if actual != expected {
+      return Err(AppError::InvalidState(format!(
+        "env verify failed for {key}: expected {:?}, got {:?}",
+        expected, actual
+      )));
+    }
 
-  match value {
-    Some(v) => std::env::set_var(key, v),
-    None => std::env::remove_var(key),
-  }
-  Ok(())
+    match value {
+      Some(v) => std::env::set_var(key, v),
+      None => std::env::remove_var(key),
+    }
+    Ok(())
   }
 }
 
@@ -291,8 +293,10 @@ fn switch_env_with_rollback(changes: &[(&str, Option<&str>)]) -> Result<(), AppE
     #[cfg(target_os = "windows")]
     let before_user = read_registry_env_var("HKCU\\Environment", key)?;
     #[cfg(target_os = "windows")]
-    let before_machine =
-      read_registry_env_var("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", key)?;
+    let before_machine = read_registry_env_var(
+      "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+      key,
+    )?;
     #[cfg(not(target_os = "windows"))]
     let before = read_user_env_var(key)?;
 
@@ -306,9 +310,9 @@ fn switch_env_with_rollback(changes: &[(&str, Option<&str>)]) -> Result<(), AppE
       }
       #[cfg(not(target_os = "windows"))]
       {
-      for (rollback_key, rollback_value) in applied.iter().rev() {
-        let _ = set_and_verify_env_var(rollback_key, rollback_value.as_deref());
-      }
+        for (rollback_key, rollback_value) in applied.iter().rev() {
+          let _ = set_and_verify_env_var(rollback_key, rollback_value.as_deref());
+        }
       }
       return Err(e);
     }
@@ -324,18 +328,159 @@ fn toml_escape(value: &str) -> String {
   value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn render_codex_config(record: &KeyRecord) -> String {
-  let mut lines = Vec::new();
-  lines.push("[api]".to_string());
-  lines.push(format!("key = \"{}\"", toml_escape(&record.api_key)));
-  if let Some(url) = &record.base_url {
-    lines.push(format!("base_url = \"{}\"", toml_escape(url)));
+fn codex_provider_name(record: &KeyRecord) -> String {
+  record
+    .note
+    .as_deref()
+    .map(str::trim)
+    .filter(|x| !x.is_empty())
+    .or_else(|| {
+      let name = record.name.trim();
+      if name.is_empty() {
+        None
+      } else {
+        Some(name)
+      }
+    })
+    .unwrap_or("openai")
+    .to_string()
+}
+
+fn is_toml_key_line(line: &str, key: &str) -> bool {
+  let trimmed = line.trim_start();
+  if !trimmed.starts_with(key) {
+    return false;
   }
-  if let Some(model) = &record.model {
-    lines.push(format!("model = \"{}\"", toml_escape(model)));
+  trimmed[key.len()..].trim_start().starts_with('=')
+}
+
+fn toml_assignment_line(key: &str, value: &str) -> String {
+  format!("{key} = \"{}\"", toml_escape(value))
+}
+
+fn replace_or_insert_top_level_string(content: &str, key: &str, value: &str) -> String {
+  let mut lines: Vec<String> = content.lines().map(|x| x.to_string()).collect();
+  let had_trailing_newline = content.ends_with('\n');
+  let first_section_index = lines
+    .iter()
+    .position(|line| {
+      let trimmed = line.trim();
+      trimmed.starts_with('[') && trimmed.ends_with(']')
+    })
+    .unwrap_or(lines.len());
+
+  for line in lines.iter_mut().take(first_section_index) {
+    if is_toml_key_line(line, key) {
+      let indent_len = line.len() - line.trim_start().len();
+      let indent = &line[..indent_len];
+      *line = format!("{indent}{}", toml_assignment_line(key, value));
+      return join_toml_lines(lines, had_trailing_newline);
+    }
   }
-  lines.push(String::new());
-  lines.join("\n")
+
+  let insert_at = first_section_index;
+  lines.insert(insert_at, toml_assignment_line(key, value));
+  join_toml_lines(lines, true)
+}
+
+fn find_toml_section(lines: &[String], section: &str) -> Option<(usize, usize)> {
+  let header = format!("[{section}]");
+  let start = lines.iter().position(|line| line.trim() == header)?;
+  let end = lines[(start + 1)..]
+    .iter()
+    .position(|line| {
+      let trimmed = line.trim();
+      trimmed.starts_with('[') && trimmed.ends_with(']')
+    })
+    .map(|offset| start + 1 + offset)
+    .unwrap_or(lines.len());
+  Some((start, end))
+}
+
+fn replace_or_insert_section_string(
+  content: &str,
+  section: &str,
+  key: &str,
+  value: &str,
+) -> String {
+  let mut lines: Vec<String> = content.lines().map(|x| x.to_string()).collect();
+  let had_trailing_newline = content.ends_with('\n');
+
+  if let Some((start, end)) = find_toml_section(&lines, section) {
+    for line in lines.iter_mut().take(end).skip(start + 1) {
+      if is_toml_key_line(line, key) {
+        let indent_len = line.len() - line.trim_start().len();
+        let indent = &line[..indent_len];
+        *line = format!("{indent}{}", toml_assignment_line(key, value));
+        return join_toml_lines(lines, had_trailing_newline);
+      }
+    }
+    lines.insert(end, toml_assignment_line(key, value));
+    return join_toml_lines(lines, true);
+  }
+
+  if !lines.is_empty() && lines.last().is_some_and(|line| !line.trim().is_empty()) {
+    lines.push(String::new());
+  }
+  lines.push(format!("[{section}]"));
+  lines.push(toml_assignment_line(key, value));
+  join_toml_lines(lines, true)
+}
+
+fn join_toml_lines(lines: Vec<String>, trailing_newline: bool) -> String {
+  let mut body = lines.join("\n");
+  if trailing_newline && !body.ends_with('\n') {
+    body.push('\n');
+  }
+  body
+}
+
+fn update_codex_config_toml(existing: Option<&str>, record: &KeyRecord) -> String {
+  let provider = codex_provider_name(record);
+  let mut content = existing.unwrap_or("").to_string();
+
+  content = replace_or_insert_top_level_string(&content, "model_provider", &provider);
+
+  if let Some(model) = record
+    .model
+    .as_deref()
+    .map(str::trim)
+    .filter(|x| !x.is_empty())
+  {
+    content = replace_or_insert_top_level_string(&content, "model", model);
+  }
+
+  let section = format!("model_providers.{provider}");
+  content = replace_or_insert_section_string(&content, &section, "name", &provider);
+  if let Some(base_url) = record
+    .base_url
+    .as_deref()
+    .map(str::trim)
+    .filter(|x| !x.is_empty())
+  {
+    content = replace_or_insert_section_string(&content, &section, "base_url", base_url);
+  }
+  replace_or_insert_section_string(&content, &section, "wire_api", "responses")
+}
+
+fn update_codex_auth_json(existing: Option<&str>, record: &KeyRecord) -> Result<Vec<u8>, AppError> {
+  let mut root = if let Some(content) = existing {
+    serde_json::from_str::<serde_json::Value>(content)?
+  } else {
+    serde_json::json!({})
+  };
+
+  if !root.is_object() {
+    root = serde_json::json!({});
+  }
+  let obj = root
+    .as_object_mut()
+    .ok_or_else(|| AppError::InvalidState("invalid codex auth root object".to_string()))?;
+  obj.insert(
+    "OPENAI_API_KEY".to_string(),
+    serde_json::Value::String(record.api_key.clone()),
+  );
+  Ok(serde_json::to_vec_pretty(&root)?)
 }
 
 fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), AppError> {
@@ -398,7 +543,9 @@ fn parse_toml_string_value_in_section(content: &str, section: &str, key: &str) -
   None
 }
 
-fn read_codex_config_values(config_path: &PathBuf) -> Result<(Option<String>, Option<String>), AppError> {
+fn read_codex_config_values(
+  config_path: &PathBuf,
+) -> Result<(Option<String>, Option<String>), AppError> {
   if !config_path.exists() {
     return Ok((None, None));
   }
@@ -461,7 +608,8 @@ fn read_claude_settings_json(home: &PathBuf) -> Result<(Option<String>, Option<S
     .and_then(|v| v.as_str())
     .map(|v| v.to_string())
     .or_else(|| {
-      env.and_then(|m| m.get("ANTHROPIC_API_KEY"))
+      env
+        .and_then(|m| m.get("ANTHROPIC_API_KEY"))
         .and_then(|v| v.as_str())
         .map(|v| v.to_string())
     });
@@ -532,7 +680,9 @@ fn write_claude_settings_json(record: &KeyRecord) -> Result<(), AppError> {
 pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> {
   let home = user_home()?;
   match tool {
-    ToolType::Codex | ToolType::CodexApp => copy_if_exists(tool, home.join(".codex").join("auth.json")),
+    ToolType::Codex | ToolType::CodexApp => {
+      copy_if_exists(tool, home.join(".codex").join("auth.json"))
+    }
     ToolType::ClaudeCode => Ok(BackupResult {
       tool,
       backup_path: None,
@@ -553,7 +703,10 @@ pub fn switch_key_for_record(record: &KeyRecord) -> Result<SwitchResult, AppErro
   switch_key_for_record_with_source(record, "env")
 }
 
-pub fn switch_key_for_record_with_source(record: &KeyRecord, current_source: &str) -> Result<SwitchResult, AppError> {
+pub fn switch_key_for_record_with_source(
+  record: &KeyRecord,
+  current_source: &str,
+) -> Result<SwitchResult, AppError> {
   match record.tool {
     ToolType::ClaudeCode => {
       let source = current_source.to_ascii_lowercase();
@@ -609,9 +762,18 @@ pub fn switch_key_for_record_with_source(record: &KeyRecord, current_source: &st
         fs::copy(&config_path, config_path.with_extension("toml.bak"))?;
       }
 
-      let payload = serde_json::json!({ "OPENAI_API_KEY": record.api_key });
-      let auth_body = serde_json::to_vec_pretty(&payload)?;
-      let config_body = render_codex_config(record);
+      let auth_existing = auth_before
+        .as_deref()
+        .map(std::str::from_utf8)
+        .transpose()
+        .map_err(|e| AppError::InvalidState(format!("codex auth.json is not utf-8: {e}")))?;
+      let config_existing = config_before
+        .as_deref()
+        .map(std::str::from_utf8)
+        .transpose()
+        .map_err(|e| AppError::InvalidState(format!("codex config.toml is not utf-8: {e}")))?;
+      let auth_body = update_codex_auth_json(auth_existing, record)?;
+      let config_body = update_codex_config_toml(config_existing, record);
 
       let write_result = (|| -> Result<(), AppError> {
         write_atomic(&auth_path, &auth_body)?;
@@ -628,7 +790,16 @@ pub fn switch_key_for_record_with_source(record: &KeyRecord, current_source: &st
       let auth_actual = fs::read_to_string(&auth_path)?;
       let config_actual = fs::read_to_string(&config_path)?;
       let auth_ok = auth_actual.contains("OPENAI_API_KEY") && auth_actual.contains(&record.api_key);
-      let config_ok = config_actual.contains("[api]") && config_actual.contains(&record.api_key);
+      let provider = codex_provider_name(record);
+      let config_ok = parse_toml_string_value(&config_actual, "model_provider").as_deref()
+        == Some(provider.as_str())
+        && parse_toml_string_value_in_section(
+          &config_actual,
+          &format!("model_providers.{provider}"),
+          "wire_api",
+        )
+        .as_deref()
+          == Some("responses");
       if !auth_ok || !config_ok {
         let _ = restore_file(&config_path, &config_before);
         let _ = restore_file(&auth_path, &auth_before);
@@ -659,14 +830,19 @@ pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>,
       let process_api_key = std::env::var("ANTHROPIC_AUTH_TOKEN")
         .ok()
         .filter(|x| !x.trim().is_empty())
-        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok().filter(|x| !x.trim().is_empty()));
+        .or_else(|| {
+          std::env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .filter(|x| !x.trim().is_empty())
+        });
       let process_base_url = std::env::var("ANTHROPIC_BASE_URL")
         .ok()
         .filter(|x| !x.trim().is_empty());
       let (settings_api_key, settings_base_url) = read_claude_settings_json(&home)?;
       #[cfg(target_os = "windows")]
-      let user_api_key = read_registry_env_var("HKCU\\Environment", "ANTHROPIC_AUTH_TOKEN")?
-        .or(read_registry_env_var("HKCU\\Environment", "ANTHROPIC_API_KEY")?);
+      let user_api_key = read_registry_env_var("HKCU\\Environment", "ANTHROPIC_AUTH_TOKEN")?.or(
+        read_registry_env_var("HKCU\\Environment", "ANTHROPIC_API_KEY")?,
+      );
       #[cfg(target_os = "windows")]
       let user_base_url = read_registry_env_var("HKCU\\Environment", "ANTHROPIC_BASE_URL")?;
       #[cfg(not(target_os = "windows"))]
@@ -708,7 +884,11 @@ pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>,
         ToolAuthSnapshot {
           tool,
           method: AuthMethodType::SettingsJson,
-          source: home.join(".claude").join("settings.json").display().to_string(),
+          source: home
+            .join(".claude")
+            .join("settings.json")
+            .display()
+            .to_string(),
           api_key: settings_api_key,
           base_url: settings_base_url,
           model: None,
@@ -839,7 +1019,7 @@ mod tests {
       is_active: true,
       created_at: "2026-01-01T00:00:00Z".to_string(),
       updated_at: None,
-      note: None,
+      note: Some("gac".to_string()),
     };
 
     let result = switch_key_for_record(&record).expect("switch failed");
@@ -854,8 +1034,9 @@ mod tests {
     let config_content = fs::read_to_string(config_path).expect("read config.toml failed");
     assert!(content.contains("OPENAI_API_KEY"));
     assert!(content.contains("sk-codex-test"));
-    assert!(config_content.contains("[api]"));
-    assert!(config_content.contains("sk-codex-test"));
+    assert!(config_content.contains("model_provider = \"gac\""));
+    assert!(config_content.contains("[model_providers.gac]"));
+    assert!(config_content.contains("wire_api = \"responses\""));
   }
 
   #[test]
@@ -869,7 +1050,11 @@ mod tests {
     let auth_path = test_home.join(".codex").join("auth.json");
     let config_path = test_home.join(".codex").join("config.toml");
     fs::write(&auth_path, r#"{"OPENAI_API_KEY":"old"}"#).expect("seed auth failed");
-    fs::write(&config_path, "[api]\nkey = \"old\"\n").expect("seed config failed");
+    fs::write(
+      &config_path,
+      "model_provider = \"old\"\nmodel = \"old-model\"\n",
+    )
+    .expect("seed config failed");
 
     let record = KeyRecord {
       id: "c3".to_string(),
@@ -881,7 +1066,7 @@ mod tests {
       is_active: true,
       created_at: "2026-01-01T00:00:00Z".to_string(),
       updated_at: None,
-      note: None,
+      note: Some("gac".to_string()),
     };
 
     let result = switch_key_for_record(&record).expect("switch failed");
@@ -896,6 +1081,85 @@ mod tests {
     let config_new = fs::read_to_string(config_path).expect("read new config failed");
     assert!(auth_new.contains("sk-codex-new"));
     assert!(config_new.contains("gpt-5"));
+    assert!(config_new.contains("model_provider = \"gac\""));
+    assert!(config_new.contains("[model_providers.gac]"));
+  }
+
+  #[test]
+  fn switch_codex_preserves_unrelated_auth_and_config_values() {
+    let _guard = env_lock().lock().expect("lock poisoned");
+    let test_home = unique_temp_home();
+    fs::create_dir_all(test_home.join(".codex")).expect("failed to create codex dir");
+    std::env::set_var("HOME", &test_home);
+    std::env::set_var("USERPROFILE", &test_home);
+
+    let auth_path = test_home.join(".codex").join("auth.json");
+    let config_path = test_home.join(".codex").join("config.toml");
+    fs::write(
+      &auth_path,
+      r#"{
+  "OPENAI_API_KEY": "old",
+  "tokens": {
+    "refresh": "keep-me"
+  }
+}"#,
+    )
+    .expect("seed auth failed");
+    fs::write(
+      &config_path,
+      r#"model_provider = "old"
+model = "old-model"
+model_reasoning_effort = "medium"
+disable_response_storage = true
+
+[marketplaces.cc-speak]
+source_type = "git"
+source = "https://github.com/PeterCang/cc-speak.git"
+
+[plugins."browser-use@openai-bundled"]
+enabled = true
+
+[model_providers.old]
+name = "old"
+base_url = "https://old.example/v1"
+wire_api = "responses"
+"#,
+    )
+    .expect("seed config failed");
+
+    let record = KeyRecord {
+      id: "c4".to_string(),
+      name: "codex-next".to_string(),
+      tool: ToolType::Codex,
+      api_key: "sk-codex-new".to_string(),
+      base_url: Some("https://gaccode.com/codex/v1".to_string()),
+      model: Some("gpt-5.3-codex".to_string()),
+      is_active: true,
+      created_at: "2026-01-01T00:00:00Z".to_string(),
+      updated_at: None,
+      note: Some("gac".to_string()),
+    };
+
+    let result = switch_key_for_record(&record).expect("switch failed");
+    assert!(result.success);
+
+    let auth_new: serde_json::Value =
+      serde_json::from_str(&fs::read_to_string(auth_path).expect("read auth failed"))
+        .expect("parse auth failed");
+    assert_eq!(auth_new["OPENAI_API_KEY"].as_str(), Some("sk-codex-new"));
+    assert_eq!(auth_new["tokens"]["refresh"].as_str(), Some("keep-me"));
+
+    let config_new = fs::read_to_string(config_path).expect("read config failed");
+    assert!(config_new.contains("model_provider = \"gac\""));
+    assert!(config_new.contains("model = \"gpt-5.3-codex\""));
+    assert!(config_new.contains("model_reasoning_effort = \"medium\""));
+    assert!(config_new.contains("disable_response_storage = true"));
+    assert!(config_new.contains("[marketplaces.cc-speak]"));
+    assert!(config_new.contains("[plugins.\"browser-use@openai-bundled\"]"));
+    assert!(config_new.contains("[model_providers.old]"));
+    assert!(config_new.contains("[model_providers.gac]"));
+    assert!(config_new.contains("base_url = \"https://gaccode.com/codex/v1\""));
+    assert!(config_new.contains("wire_api = \"responses\""));
   }
 
   #[test]

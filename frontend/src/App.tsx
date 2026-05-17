@@ -515,7 +515,11 @@ function App() {
               <h2>{`${t.addKey} · ${toolOptions.find((item) => item.value === selectedTool)?.label ?? selectedTool}`}</h2>
               <button className="plus-button" onClick={() => setShowAddModal(false)} aria-label="Close">x</button>
             </div>
-            <div className="grid">
+            <div className="grid add-key-form">
+              <label>
+                {t.remark}
+                <input value={draft.note || ""} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
+              </label>
               <label>
                 {t.apiKey}
                 <input value={draft.apiKey} onChange={(e) => setDraft({ ...draft, apiKey: e.target.value })} />
@@ -537,10 +541,6 @@ function App() {
               <label>
                 {`${t.model} (${t.optional})`}
                 <input value={draft.model || ""} onChange={(e) => setDraft({ ...draft, model: e.target.value })} />
-              </label>
-              <label>
-                {t.remark}
-                <input value={draft.note || ""} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
               </label>
             </div>
             <div className="row">

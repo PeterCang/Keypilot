@@ -27,6 +27,10 @@ body { margin: 0; }
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.add-key-form {
+  grid-template-columns: 1fr;
+}
+
 input, select, button, textarea {
   width: 100%;
   margin-top: 6px;
