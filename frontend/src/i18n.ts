@@ -50,6 +50,7 @@ type Dict = {
   currentConfig: string;
   currentConfigFromTool: string;
   currentConfigNotSet: string;
+  loading: string;
 };
 
 export const dictionaries: Record<Locale, Dict> = {
@@ -103,7 +104,8 @@ export const dictionaries: Record<Locale, Dict> = {
     argPresets: "常用参数",
     currentConfig: "当前工具配置",
     currentConfigFromTool: "读取来源",
-    currentConfigNotSet: "当前工具未读取到 API Key"
+    currentConfigNotSet: "当前工具未读取到 API Key",
+    loading: "加载中..."
   },
   "en-US": {
     appTitle: "Keypilot Console",
@@ -154,7 +156,8 @@ export const dictionaries: Record<Locale, Dict> = {
     argPresets: "Common Args",
     currentConfig: "Current Tool Config",
     currentConfigFromTool: "Source",
-    currentConfigNotSet: "No API key detected from current tool config"
+    currentConfigNotSet: "No API key detected from current tool config",
+    loading: "Loading..."
   }
 };
 

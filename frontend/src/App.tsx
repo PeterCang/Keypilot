@@ -35,6 +35,7 @@ function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTool, setSelectedTool] = useState<ToolType>("claude-code");
   const [currentToolConfig, setCurrentToolConfig] = useState<ToolCurrentConfig | null>(null);
+  const [isKeyListLoading, setIsKeyListLoading] = useState(false);
   const [projectDir, setProjectDir] = useState("");
   const [launchArgs, setLaunchArgs] = useState("");
   const [showArgMenu, setShowArgMenu] = useState(false);
@@ -66,12 +67,23 @@ function App() {
   };
 
   useEffect(() => {
-    reloadAll(selectedTool).catch((err) => setLog(`${t.initFailed}: ${String(err)}`));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    reloadAll(selectedTool).catch((err) => setLog(`${t.initFailed}: ${String(err)}`));
+    let cancelled = false;
+    const run = async () => {
+      setIsKeyListLoading(true);
+      try {
+        await reloadAll(selectedTool);
+      } catch (err) {
+        setLog(`${t.initFailed}: ${String(err)}`);
+      } finally {
+        if (!cancelled) {
+          setIsKeyListLoading(false);
+        }
+      }
+    };
+    run().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTool]);
 
@@ -365,23 +377,25 @@ function App() {
             +
           </button>
         </div>
-        <div className="list-item">
-          <div className="row">
-            <strong>{t.currentConfig}</strong>
-            <span className="tag">{selectedTool}</span>
-          </div>
-          {currentToolConfig?.apiKey ? (
-            <>
-              <div>{t.currentConfigFromTool}: {currentToolConfig.source}</div>
-              <div>{t.apiKey}: {currentToolConfig.apiKey}</div>
-              <div>{t.baseUrl}: {currentToolConfig.baseUrl || "-"}</div>
-              {currentToolConfig.model ? <div>{t.model}: {currentToolConfig.model}</div> : null}
-            </>
-          ) : (
-            <div>{t.currentConfigNotSet}</div>
-          )}
-        </div>
-        {keys.map((key) => (
+        {isKeyListLoading ? <div className="list-item">{t.loading}</div> : (
+          <>
+            <div className="list-item">
+              <div className="row">
+                <strong>{t.currentConfig}</strong>
+                <span className="tag">{selectedTool}</span>
+              </div>
+              {currentToolConfig?.apiKey ? (
+                <>
+                  <div>{t.currentConfigFromTool}: {currentToolConfig.source}</div>
+                  <div>{t.apiKey}: {currentToolConfig.apiKey}</div>
+                  <div>{t.baseUrl}: {currentToolConfig.baseUrl || "-"}</div>
+                  {currentToolConfig.model ? <div>{t.model}: {currentToolConfig.model}</div> : null}
+                </>
+              ) : (
+                <div>{t.currentConfigNotSet}</div>
+              )}
+            </div>
+            {keys.map((key) => (
           <div key={key.id} className="list-item">
             <div className="row">
               <strong>{key.name}</strong>
@@ -413,7 +427,9 @@ function App() {
               </button>
             </div>
           </div>
-        ))}
+            ))}
+          </>
+        )}
       </div>
 
       {showAddModal ? (
