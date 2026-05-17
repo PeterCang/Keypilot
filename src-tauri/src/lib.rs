@@ -5,8 +5,8 @@ mod models;
 mod process;
 mod storage;
 
-use adapters::{backup_config_for_tool, read_current_tool_config, switch_key_for_record};
-use models::{BackupResult, KeyRecord, SwitchResult, ToolCurrentConfig, ToolStatus, ToolType};
+use adapters::{backup_config_for_tool, detect_tool_auth_methods, read_current_tool_config, switch_key_for_record};
+use models::{BackupResult, KeyRecord, SwitchResult, ToolAuthSnapshot, ToolCurrentConfig, ToolStatus, ToolType};
 use storage::{load_state, save_state};
 use tauri::Emitter;
 use tauri::Manager;
@@ -136,6 +136,11 @@ fn get_tool_current_config(tool: ToolType) -> Result<ToolCurrentConfig, String> 
 }
 
 #[tauri::command]
+fn detect_tool_auth(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>, String> {
+  detect_tool_auth_methods(tool).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn install_tool(app: tauri::AppHandle, tool: ToolType) -> Result<String, String> {
   installer::install_tool(&app, tool).map_err(|e| e.to_string())
 }
@@ -205,6 +210,7 @@ pub fn run() {
       detect_tools,
       backup_config,
       get_tool_current_config,
+      detect_tool_auth,
       install_tool,
       restart_tool,
       uninstall_tool,

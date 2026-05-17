@@ -41,3 +41,24 @@ export interface ToolCurrentConfig {
   model?: string;
   source: string;
 }
+
+export type AuthMethodType =
+  | "settings_json"
+  | "env_process"
+  | "env_user"
+  | "env_machine"
+  | "config_toml"
+  | "auth_json"
+  | "custom";
+
+export interface ToolAuthSnapshot {
+  tool: ToolType;
+  method: AuthMethodType;
+  source: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  writable: boolean;
+  isEffective: boolean;
+  priority: number;
+}

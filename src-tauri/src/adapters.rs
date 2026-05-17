@@ -1,5 +1,7 @@
 use crate::error::AppError;
-use crate::models::{BackupResult, KeyRecord, SwitchResult, ToolCurrentConfig, ToolType};
+use crate::models::{
+  AuthMethodType, BackupResult, KeyRecord, SwitchResult, ToolAuthSnapshot, ToolCurrentConfig, ToolType,
+};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -245,6 +247,62 @@ fn parse_toml_string_value(content: &str, key: &str) -> Option<String> {
   None
 }
 
+fn resolve_effective_snapshot(mut snapshots: Vec<ToolAuthSnapshot>) -> Vec<ToolAuthSnapshot> {
+  snapshots.sort_by_key(|x| x.priority);
+  let mut marked = false;
+  for item in &mut snapshots {
+    let has_value = item.api_key.is_some() || item.base_url.is_some() || item.model.is_some();
+    item.is_effective = !marked && has_value;
+    if item.is_effective {
+      marked = true;
+    }
+  }
+  snapshots
+}
+
+fn to_current_config(tool: ToolType, snapshots: &[ToolAuthSnapshot]) -> ToolCurrentConfig {
+  if let Some(effective) = snapshots.iter().find(|x| x.is_effective) {
+    return ToolCurrentConfig {
+      tool,
+      api_key: effective.api_key.clone(),
+      base_url: effective.base_url.clone(),
+      model: effective.model.clone(),
+      source: effective.source.clone(),
+    };
+  }
+  ToolCurrentConfig {
+    tool,
+    api_key: None,
+    base_url: None,
+    model: None,
+    source: "none".to_string(),
+  }
+}
+
+fn read_claude_settings_json(home: &PathBuf) -> Result<(Option<String>, Option<String>), AppError> {
+  let settings_path = home.join(".claude").join("settings.json");
+  if !settings_path.exists() {
+    return Ok((None, None));
+  }
+  let content = fs::read_to_string(settings_path)?;
+  let json: serde_json::Value = serde_json::from_str(&content)?;
+  let env = json.get("env").and_then(|v| v.as_object());
+  let api_key = env
+    .and_then(|m| m.get("ANTHROPIC_AUTH_TOKEN"))
+    .and_then(|v| v.as_str())
+    .map(|v| v.to_string())
+    .or_else(|| {
+      env.and_then(|m| m.get("ANTHROPIC_API_KEY"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+    });
+  let base_url = env
+    .and_then(|m| m.get("ANTHROPIC_BASE_URL"))
+    .and_then(|v| v.as_str())
+    .map(|v| v.to_string());
+  Ok((api_key, base_url))
+}
+
 pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> {
   let home = user_home()?;
   match tool {
@@ -354,22 +412,126 @@ pub fn switch_key_for_record(record: &KeyRecord) -> Result<SwitchResult, AppErro
 }
 
 pub fn read_current_tool_config(tool: ToolType) -> Result<ToolCurrentConfig, AppError> {
+  let snapshots = detect_tool_auth_methods(tool)?;
+  Ok(to_current_config(tool, &snapshots))
+}
+
+pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>, AppError> {
   let home = user_home()?;
   match tool {
-    ToolType::ClaudeCode => Ok(ToolCurrentConfig {
-      tool,
-      api_key: read_effective_env_var("ANTHROPIC_AUTH_TOKEN")?
-        .or(read_effective_env_var("ANTHROPIC_API_KEY")?),
-      base_url: read_effective_env_var("ANTHROPIC_BASE_URL")?,
-      model: None,
-      source: "env".to_string(),
-    }),
+    ToolType::ClaudeCode => {
+      let process_api_key = std::env::var("ANTHROPIC_AUTH_TOKEN")
+        .ok()
+        .filter(|x| !x.trim().is_empty())
+        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok().filter(|x| !x.trim().is_empty()));
+      let process_base_url = std::env::var("ANTHROPIC_BASE_URL")
+        .ok()
+        .filter(|x| !x.trim().is_empty());
+      let (settings_api_key, settings_base_url) = read_claude_settings_json(&home)?;
+      #[cfg(target_os = "windows")]
+      let user_api_key = read_registry_env_var("HKCU\\Environment", "ANTHROPIC_AUTH_TOKEN")?
+        .or(read_registry_env_var("HKCU\\Environment", "ANTHROPIC_API_KEY")?);
+      #[cfg(target_os = "windows")]
+      let user_base_url = read_registry_env_var("HKCU\\Environment", "ANTHROPIC_BASE_URL")?;
+      #[cfg(not(target_os = "windows"))]
+      let user_api_key = read_user_env_var("ANTHROPIC_AUTH_TOKEN")?;
+      #[cfg(not(target_os = "windows"))]
+      let user_base_url = read_user_env_var("ANTHROPIC_BASE_URL")?;
+
+      #[cfg(target_os = "windows")]
+      let machine_api_key = read_registry_env_var(
+        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+        "ANTHROPIC_AUTH_TOKEN",
+      )?
+      .or(read_registry_env_var(
+        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+        "ANTHROPIC_API_KEY",
+      )?);
+      #[cfg(target_os = "windows")]
+      let machine_base_url = read_registry_env_var(
+        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+        "ANTHROPIC_BASE_URL",
+      )?;
+      #[cfg(not(target_os = "windows"))]
+      let machine_api_key = None;
+      #[cfg(not(target_os = "windows"))]
+      let machine_base_url = None;
+
+      let snapshots = vec![
+        ToolAuthSnapshot {
+          tool,
+          method: AuthMethodType::EnvProcess,
+          source: "process_env".to_string(),
+          api_key: process_api_key,
+          base_url: process_base_url,
+          model: None,
+          writable: false,
+          is_effective: false,
+          priority: 1,
+        },
+        ToolAuthSnapshot {
+          tool,
+          method: AuthMethodType::SettingsJson,
+          source: home.join(".claude").join("settings.json").display().to_string(),
+          api_key: settings_api_key,
+          base_url: settings_base_url,
+          model: None,
+          writable: true,
+          is_effective: false,
+          priority: 2,
+        },
+        ToolAuthSnapshot {
+          tool,
+          method: AuthMethodType::EnvUser,
+          source: if cfg!(target_os = "windows") {
+            "HKCU\\Environment".to_string()
+          } else {
+            "user_env".to_string()
+          },
+          api_key: user_api_key,
+          base_url: user_base_url,
+          model: None,
+          writable: true,
+          is_effective: false,
+          priority: 3,
+        },
+        ToolAuthSnapshot {
+          tool,
+          method: AuthMethodType::EnvMachine,
+          source: if cfg!(target_os = "windows") {
+            "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment".to_string()
+          } else {
+            "machine_env".to_string()
+          },
+          api_key: machine_api_key,
+          base_url: machine_base_url,
+          model: None,
+          writable: false,
+          is_effective: false,
+          priority: 4,
+        },
+      ];
+      Ok(resolve_effective_snapshot(snapshots))
+    }
     ToolType::GeminiCli => Ok(ToolCurrentConfig {
       tool,
       api_key: read_effective_env_var("GEMINI_API_KEY")?,
       base_url: read_effective_env_var("GOOGLE_GEMINI_BASE_URL")?,
       model: read_effective_env_var("GEMINI_MODEL")?,
       source: "env".to_string(),
+    })
+    .map(|cfg| {
+      vec![ToolAuthSnapshot {
+        tool,
+        method: AuthMethodType::EnvUser,
+        source: cfg.source.clone(),
+        api_key: cfg.api_key,
+        base_url: cfg.base_url,
+        model: cfg.model,
+        writable: true,
+        is_effective: true,
+        priority: 1,
+      }]
     }),
     ToolType::Codex | ToolType::CodexApp => {
       let codex_dir = home.join(".codex");
@@ -397,13 +559,17 @@ pub fn read_current_tool_config(tool: ToolType) -> Result<ToolCurrentConfig, App
         (None, None)
       };
 
-      Ok(ToolCurrentConfig {
+      Ok(vec![ToolAuthSnapshot {
         tool,
+        method: AuthMethodType::AuthJson,
+        source: auth_path.display().to_string(),
         api_key,
         base_url,
         model,
-        source: "file".to_string(),
-      })
+        writable: true,
+        is_effective: true,
+        priority: 1,
+      }])
     }
   }
 }

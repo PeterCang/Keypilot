@@ -60,3 +60,29 @@ pub struct ToolCurrentConfig {
   pub model: Option<String>,
   pub source: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthMethodType {
+  SettingsJson,
+  EnvProcess,
+  EnvUser,
+  EnvMachine,
+  ConfigToml,
+  AuthJson,
+  Custom,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolAuthSnapshot {
+  pub tool: ToolType,
+  pub method: AuthMethodType,
+  pub source: String,
+  pub api_key: Option<String>,
+  pub base_url: Option<String>,
+  pub model: Option<String>,
+  pub writable: bool,
+  pub is_effective: bool,
+  pub priority: u32,
+}
