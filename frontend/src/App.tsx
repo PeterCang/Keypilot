@@ -128,9 +128,10 @@ function App() {
 
   const onSubmit = async () => {
     const now = new Date().toISOString();
-    const autoName = `${draft.tool}-${now.slice(0, 19).replace("T", " ")}`;
+    const autoName = `${selectedTool}-${now.slice(0, 19).replace("T", " ")}`;
     const payload: KeyRecord = {
       ...draft,
+      tool: selectedTool,
       id: draft.id || crypto.randomUUID(),
       name: draft.name || autoName,
       createdAt: draft.createdAt || now,
@@ -442,13 +443,7 @@ function App() {
             <div className="grid">
               <label>
                 {t.tool}
-                <select value={draft.tool} onChange={(e) => setDraft({ ...draft, tool: e.target.value as ToolType })}>
-                  {toolOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                <input value={toolOptions.find((item) => item.value === selectedTool)?.label ?? selectedTool} readOnly />
               </label>
               <label>
                 {t.apiKey}
