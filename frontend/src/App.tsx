@@ -437,14 +437,10 @@ function App() {
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
-              <h2>{t.addKey}</h2>
+              <h2>{`${t.addKey} · ${toolOptions.find((item) => item.value === selectedTool)?.label ?? selectedTool}`}</h2>
               <button className="plus-button" onClick={() => setShowAddModal(false)} aria-label="Close">x</button>
             </div>
             <div className="grid">
-              <label>
-                {t.tool}
-                <input value={toolOptions.find((item) => item.value === selectedTool)?.label ?? selectedTool} readOnly />
-              </label>
               <label>
                 {t.apiKey}
                 <input value={draft.apiKey} onChange={(e) => setDraft({ ...draft, apiKey: e.target.value })} />
