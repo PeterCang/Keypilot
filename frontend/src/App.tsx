@@ -293,6 +293,12 @@ function App() {
     return baseUrlHistory[selectedTool] ?? [];
   }, [baseUrlHistory, selectedTool]);
 
+  const visibleKeys = useMemo(() => {
+    const currentApiKey = currentToolConfig?.apiKey?.trim();
+    if (!currentApiKey) return keys;
+    return keys.filter((key) => key.apiKey.trim() !== currentApiKey);
+  }, [keys, currentToolConfig]);
+
   return (
     <div className="app">
       <div className="row head-row">
@@ -446,7 +452,7 @@ function App() {
                 <div>{t.currentConfigNotSet}</div>
               )}
             </div>
-            {keys.map((key) => (
+            {visibleKeys.map((key) => (
               <div key={key.id} className="list-item key-item">
                 <div className="key-item-main">
                   <div className="row">
