@@ -47,6 +47,9 @@ type Dict = {
   installStarted: string;
   addArg: string;
   argPresets: string;
+  currentConfig: string;
+  currentConfigFromTool: string;
+  currentConfigNotSet: string;
 };
 
 export const dictionaries: Record<Locale, Dict> = {
@@ -97,7 +100,10 @@ export const dictionaries: Record<Locale, Dict> = {
     ,
     installStarted: "开始安装",
     addArg: "添加参数",
-    argPresets: "常用参数"
+    argPresets: "常用参数",
+    currentConfig: "当前工具配置",
+    currentConfigFromTool: "读取来源",
+    currentConfigNotSet: "当前工具未读取到 API Key"
   },
   "en-US": {
     appTitle: "Keypilot Console",
@@ -145,7 +151,10 @@ export const dictionaries: Record<Locale, Dict> = {
     traySwitched: "Key switched from tray",
     installStarted: "Install started",
     addArg: "Add Arg",
-    argPresets: "Common Args"
+    argPresets: "Common Args",
+    currentConfig: "Current Tool Config",
+    currentConfigFromTool: "Source",
+    currentConfigNotSet: "No API key detected from current tool config"
   }
 };
 

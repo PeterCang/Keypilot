@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::models::{BackupResult, KeyRecord, SwitchResult, ToolType};
+use crate::models::{BackupResult, KeyRecord, SwitchResult, ToolCurrentConfig, ToolType};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -192,6 +192,22 @@ fn restore_file(path: &PathBuf, backup: &Option<Vec<u8>>) -> Result<(), AppError
   Ok(())
 }
 
+fn parse_toml_string_value(content: &str, key: &str) -> Option<String> {
+  let needle = format!("{key} =");
+  for raw_line in content.lines() {
+    let line = raw_line.trim();
+    if !line.starts_with(&needle) {
+      continue;
+    }
+    let eq_index = line.find('=')?;
+    let value = line[(eq_index + 1)..].trim();
+    if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+      return Some(value[1..(value.len() - 1)].to_string());
+    }
+  }
+  None
+}
+
 pub fn backup_config_for_tool(tool: ToolType) -> Result<BackupResult, AppError> {
   let home = user_home()?;
   match tool {
@@ -295,6 +311,60 @@ pub fn switch_key_for_record(record: &KeyRecord) -> Result<SwitchResult, AppErro
         warning: None,
         requires_restart: true,
         message: "codex key switched".to_string(),
+      })
+    }
+  }
+}
+
+pub fn read_current_tool_config(tool: ToolType) -> Result<ToolCurrentConfig, AppError> {
+  let home = user_home()?;
+  match tool {
+    ToolType::ClaudeCode => Ok(ToolCurrentConfig {
+      tool,
+      api_key: read_user_env_var("ANTHROPIC_AUTH_TOKEN")?,
+      base_url: read_user_env_var("ANTHROPIC_BASE_URL")?,
+      model: None,
+      source: "env".to_string(),
+    }),
+    ToolType::GeminiCli => Ok(ToolCurrentConfig {
+      tool,
+      api_key: read_user_env_var("GEMINI_API_KEY")?,
+      base_url: read_user_env_var("GOOGLE_GEMINI_BASE_URL")?,
+      model: read_user_env_var("GEMINI_MODEL")?,
+      source: "env".to_string(),
+    }),
+    ToolType::Codex | ToolType::CodexApp => {
+      let codex_dir = home.join(".codex");
+      let auth_path = codex_dir.join("auth.json");
+      let config_path = codex_dir.join("config.toml");
+
+      let api_key = if auth_path.exists() {
+        let content = fs::read_to_string(&auth_path)?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+        json
+          .get("OPENAI_API_KEY")
+          .and_then(|v| v.as_str())
+          .map(|v| v.to_string())
+      } else {
+        None
+      };
+
+      let (base_url, model) = if config_path.exists() {
+        let content = fs::read_to_string(&config_path)?;
+        (
+          parse_toml_string_value(&content, "base_url"),
+          parse_toml_string_value(&content, "model"),
+        )
+      } else {
+        (None, None)
+      };
+
+      Ok(ToolCurrentConfig {
+        tool,
+        api_key,
+        base_url,
+        model,
+        source: "file".to_string(),
       })
     }
   }

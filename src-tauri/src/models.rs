@@ -50,3 +50,13 @@ pub struct BackupResult {
   pub success: bool,
   pub message: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCurrentConfig {
+  pub tool: ToolType,
+  pub api_key: Option<String>,
+  pub base_url: Option<String>,
+  pub model: Option<String>,
+  pub source: String,
+}

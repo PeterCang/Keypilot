@@ -33,3 +33,11 @@ export interface BackupResult {
   success: boolean;
   message: string;
 }
+
+export interface ToolCurrentConfig {
+  tool: ToolType;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  source: string;
+}

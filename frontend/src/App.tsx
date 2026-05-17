@@ -5,6 +5,7 @@ import {
   deleteKey,
   detectTools,
   installTool,
+  getToolCurrentConfig,
   listKeys,
   restartTool,
   saveKey,
@@ -13,7 +14,7 @@ import {
   uninstallTool
 } from "./api";
 import { dictionaries, resolveLocale, type Locale } from "./i18n";
-import type { KeyRecord, ToolStatus, ToolType } from "./types";
+import type { KeyRecord, ToolCurrentConfig, ToolStatus, ToolType } from "./types";
 
 const emptyDraft: KeyRecord = {
   id: "",
@@ -33,6 +34,7 @@ function App() {
   const [tools, setTools] = useState<ToolStatus[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTool, setSelectedTool] = useState<ToolType>("claude-code");
+  const [currentToolConfig, setCurrentToolConfig] = useState<ToolCurrentConfig | null>(null);
   const [projectDir, setProjectDir] = useState("");
   const [launchArgs, setLaunchArgs] = useState("");
   const [showArgMenu, setShowArgMenu] = useState(false);
@@ -53,8 +55,14 @@ function App() {
     setTools(tStatus);
   };
 
+  const reloadCurrentToolConfig = async (tool?: ToolType) => {
+    const targetTool = tool ?? selectedTool;
+    const config = await getToolCurrentConfig(targetTool);
+    setCurrentToolConfig(config);
+  };
+
   const reloadAll = async (tool?: ToolType) => {
-    await Promise.all([reloadKeys(tool), reloadTools()]);
+    await Promise.all([reloadKeys(tool), reloadTools(), reloadCurrentToolConfig(tool)]);
   };
 
   useEffect(() => {
@@ -222,6 +230,12 @@ function App() {
     setShowArgMenu(false);
   };
 
+  const maskKey = (value?: string) => {
+    if (!value) return "";
+    if (value.length <= 8) return "****";
+    return `${value.slice(0, 4)}...${value.slice(-4)}`;
+  };
+
   return (
     <div className="app">
       <div className="row head-row">
@@ -356,6 +370,22 @@ function App() {
           >
             +
           </button>
+        </div>
+        <div className="list-item">
+          <div className="row">
+            <strong>{t.currentConfig}</strong>
+            <span className="tag">{selectedTool}</span>
+          </div>
+          {currentToolConfig?.apiKey ? (
+            <>
+              <div>{t.apiKey}: {maskKey(currentToolConfig.apiKey)}</div>
+              <div>{t.currentConfigFromTool}: {currentToolConfig.source}</div>
+              {currentToolConfig.baseUrl ? <div>{t.baseUrl}: {currentToolConfig.baseUrl}</div> : null}
+              {currentToolConfig.model ? <div>{t.model}: {currentToolConfig.model}</div> : null}
+            </>
+          ) : (
+            <div>{t.currentConfigNotSet}</div>
+          )}
         </div>
         {keys.map((key) => (
           <div key={key.id} className="list-item">
