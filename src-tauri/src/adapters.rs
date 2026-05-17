@@ -625,6 +625,14 @@ fn write_claude_settings_json(record: &KeyRecord) -> Result<(), AppError> {
   let claude_dir = home.join(".claude");
   fs::create_dir_all(&claude_dir)?;
   let settings_path = claude_dir.join("settings.json");
+  let settings_before = if settings_path.exists() {
+    Some(fs::read(&settings_path)?)
+  } else {
+    None
+  };
+  if settings_path.exists() {
+    fs::copy(&settings_path, settings_path.with_extension("json.bak"))?;
+  }
 
   let mut root = if settings_path.exists() {
     let content = fs::read_to_string(&settings_path)?;
@@ -666,10 +674,14 @@ fn write_claude_settings_json(record: &KeyRecord) -> Result<(), AppError> {
   }
 
   let body = serde_json::to_vec_pretty(&root)?;
-  write_atomic(&settings_path, &body)?;
+  if let Err(err) = write_atomic(&settings_path, &body) {
+    let _ = restore_file(&settings_path, &settings_before);
+    return Err(err);
+  }
 
   let (api_key, base_url) = read_claude_settings_json(&home)?;
   if api_key.as_deref() != Some(record.api_key.as_str()) || base_url != record.base_url {
+    let _ = restore_file(&settings_path, &settings_before);
     return Err(AppError::InvalidState(
       "claude settings.json verification failed".to_string(),
     ));
@@ -1160,6 +1172,67 @@ wire_api = "responses"
     assert!(config_new.contains("[model_providers.gac]"));
     assert!(config_new.contains("base_url = \"https://gaccode.com/codex/v1\""));
     assert!(config_new.contains("wire_api = \"responses\""));
+  }
+
+  #[test]
+  fn switch_claude_settings_json_creates_backup_and_preserves_other_values() {
+    let _guard = env_lock().lock().expect("lock poisoned");
+    let test_home = unique_temp_home();
+    let claude_dir = test_home.join(".claude");
+    fs::create_dir_all(&claude_dir).expect("failed to create claude dir");
+    std::env::set_var("HOME", &test_home);
+    std::env::set_var("USERPROFILE", &test_home);
+
+    let settings_path = claude_dir.join("settings.json");
+    fs::write(
+      &settings_path,
+      r#"{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "old",
+    "ANTHROPIC_BASE_URL": "https://old.example"
+  },
+  "permissions": {
+    "allow": ["Bash(ls *)"]
+  }
+}"#,
+    )
+    .expect("seed settings failed");
+
+    let record = KeyRecord {
+      id: "c5".to_string(),
+      name: "claude-next".to_string(),
+      tool: ToolType::ClaudeCode,
+      api_key: "sk-claude-new".to_string(),
+      base_url: Some("https://api.anthropic.com".to_string()),
+      model: None,
+      is_active: true,
+      created_at: "2026-01-01T00:00:00Z".to_string(),
+      updated_at: None,
+      note: None,
+    };
+
+    let source = settings_path.display().to_string();
+    let result = switch_key_for_record_with_source(&record, &source).expect("switch failed");
+    assert!(result.success);
+
+    let backup_path = claude_dir.join("settings.json.bak");
+    assert!(backup_path.exists(), "settings backup should exist");
+    let backup = fs::read_to_string(backup_path).expect("read backup failed");
+    assert!(backup.contains("\"ANTHROPIC_AUTH_TOKEN\": \"old\""));
+    assert!(backup.contains("\"permissions\""));
+
+    let next: serde_json::Value =
+      serde_json::from_str(&fs::read_to_string(settings_path).expect("read settings failed"))
+        .expect("parse settings failed");
+    assert_eq!(
+      next["env"]["ANTHROPIC_AUTH_TOKEN"].as_str(),
+      Some("sk-claude-new")
+    );
+    assert_eq!(
+      next["env"]["ANTHROPIC_BASE_URL"].as_str(),
+      Some("https://api.anthropic.com")
+    );
+    assert_eq!(next["permissions"]["allow"][0].as_str(), Some("Bash(ls *)"));
   }
 
   #[test]
