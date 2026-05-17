@@ -46,6 +46,13 @@ fn run_command(program: &str, args: &[&str]) -> Result<(), AppError> {
 }
 
 #[cfg(target_os = "windows")]
+#[derive(Clone, Copy)]
+enum WindowsEnvScope {
+  User,
+  Machine,
+}
+
+#[cfg(target_os = "windows")]
 fn persist_user_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> {
   match value {
     Some(v) => run_command(
@@ -65,6 +72,36 @@ fn persist_user_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> 
     None => run_command(
       "reg",
       &["delete", "HKCU\\Environment", "/v", key, "/f"],
+    ),
+  }
+}
+
+#[cfg(target_os = "windows")]
+fn persist_machine_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> {
+  match value {
+    Some(v) => run_command(
+      "reg",
+      &[
+        "add",
+        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+        "/v",
+        key,
+        "/t",
+        "REG_SZ",
+        "/d",
+        v,
+        "/f",
+      ],
+    ),
+    None => run_command(
+      "reg",
+      &[
+        "delete",
+        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+        "/v",
+        key,
+        "/f",
+      ],
     ),
   }
 }
@@ -162,6 +199,58 @@ fn read_effective_env_var(_key: &str) -> Result<Option<String>, AppError> {
 }
 
 fn set_and_verify_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> {
+  #[cfg(target_os = "windows")]
+  {
+    let scope = if read_registry_env_var("HKCU\\Environment", key)?.is_some() {
+      WindowsEnvScope::User
+    } else if read_registry_env_var(
+      "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+      key,
+    )?
+    .is_some()
+    {
+      WindowsEnvScope::Machine
+    } else {
+      WindowsEnvScope::User
+    };
+
+    match scope {
+      WindowsEnvScope::User => {
+        persist_user_env_var(key, value)?;
+        let actual = read_registry_env_var("HKCU\\Environment", key)?;
+        let expected = value.map(|v| v.to_string());
+        if actual != expected {
+          return Err(AppError::InvalidState(format!(
+            "env verify failed for {key} in user scope: expected {:?}, got {:?}",
+            expected, actual
+          )));
+        }
+      }
+      WindowsEnvScope::Machine => {
+        persist_machine_env_var(key, value)?;
+        let actual = read_registry_env_var(
+          "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+          key,
+        )?;
+        let expected = value.map(|v| v.to_string());
+        if actual != expected {
+          return Err(AppError::InvalidState(format!(
+            "env verify failed for {key} in machine scope: expected {:?}, got {:?}",
+            expected, actual
+          )));
+        }
+      }
+    }
+
+    match value {
+      Some(v) => std::env::set_var(key, v),
+      None => std::env::remove_var(key),
+    }
+    return Ok(());
+  }
+
+  #[cfg(not(target_os = "windows"))]
+  {
   persist_user_env_var(key, value)?;
   let actual = read_user_env_var(key)?;
   let expected = value.map(|v| v.to_string());
@@ -177,6 +266,7 @@ fn set_and_verify_env_var(key: &str, value: Option<&str>) -> Result<(), AppError
     None => std::env::remove_var(key),
   }
   Ok(())
+  }
 }
 
 fn switch_env_with_rollback(changes: &[(&str, Option<&str>)]) -> Result<(), AppError> {
