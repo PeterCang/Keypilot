@@ -46,6 +46,31 @@ button.danger { background: #b91c1c; }
   margin-top: 10px;
 }
 
+.key-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.key-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.key-item-actions {
+  display: flex;
+  gap: 8px;
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.key-item-actions button {
+  width: auto;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
 .row { display: flex; gap: 8px; }
 .head-row { justify-content: space-between; align-items: center; }
 .locale-picker { min-width: 140px; font-weight: 600; }
@@ -240,5 +265,17 @@ button.danger { background: #b91c1c; }
   .head-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .key-item {
+    flex-direction: column;
+  }
+
+  .key-item-actions {
+    width: 100%;
+  }
+
+  .key-item-actions button {
+    width: 100%;
   }
 }

@@ -433,37 +433,33 @@ function App() {
               )}
             </div>
             {keys.map((key) => (
-          <div key={key.id} className="list-item">
-            <div className="row">
-              <strong>{key.name}</strong>
-              <span className="tag">{key.tool}</span>
-              {key.isActive ? <span className="tag">{t.active}</span> : null}
-            </div>
-            <div>{key.baseUrl || t.noBaseUrl}</div>
-            <div className="row">
-              <button
-                onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}
-              >
-                {t.switchKey}
-              </button>
-              <button
-                className="secondary"
-                onClick={() => handleSwitch(key, true).catch((err) => setLog(String(err)))}
-              >
-                {t.switchAndRestart}
-              </button>
-              <button
-                className="danger"
-                onClick={async () => {
-                  await deleteKey(key.id);
-                  setLog(`${t.deletedKey}: ${key.name}`);
-                  await reloadAll(selectedTool);
-                }}
-              >
-                {t.delete}
-              </button>
-            </div>
-          </div>
+              <div key={key.id} className="list-item key-item">
+                <div className="key-item-main">
+                  <div className="row">
+                    <strong>{key.name}</strong>
+                    <span className="tag">{key.tool}</span>
+                    {key.isActive ? <span className="tag">{t.active}</span> : null}
+                  </div>
+                  <div>{t.apiKey}: {key.apiKey}</div>
+                  <div>{t.baseUrl}: {key.baseUrl || "-"}</div>
+                  {key.model ? <div>{t.model}: {key.model}</div> : null}
+                </div>
+                <div className="key-item-actions">
+                  <button onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}>
+                    {t.switchKey}
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={async () => {
+                      await deleteKey(key.id);
+                      setLog(`${t.deletedKey}: ${key.name}`);
+                      await reloadAll(selectedTool);
+                    }}
+                  >
+                    {t.delete}
+                  </button>
+                </div>
+              </div>
             ))}
           </>
         )}
