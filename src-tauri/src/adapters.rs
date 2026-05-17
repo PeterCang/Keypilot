@@ -247,6 +247,49 @@ fn parse_toml_string_value(content: &str, key: &str) -> Option<String> {
   None
 }
 
+fn parse_toml_string_value_in_section(content: &str, section: &str, key: &str) -> Option<String> {
+  let section_header = format!("[{section}]");
+  let key_needle = format!("{key} =");
+  let mut in_target_section = false;
+  for raw_line in content.lines() {
+    let line = raw_line.trim();
+    if line.starts_with('[') && line.ends_with(']') {
+      in_target_section = line == section_header;
+      continue;
+    }
+    if !in_target_section {
+      continue;
+    }
+    if !line.starts_with(&key_needle) {
+      continue;
+    }
+    let eq_index = line.find('=')?;
+    let value = line[(eq_index + 1)..].trim();
+    if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+      return Some(value[1..(value.len() - 1)].to_string());
+    }
+  }
+  None
+}
+
+fn read_codex_config_values(config_path: &PathBuf) -> Result<(Option<String>, Option<String>), AppError> {
+  if !config_path.exists() {
+    return Ok((None, None));
+  }
+  let content = fs::read_to_string(config_path)?;
+  let model = parse_toml_string_value(&content, "model");
+  let model_provider = parse_toml_string_value(&content, "model_provider");
+
+  let base_url = if let Some(provider) = model_provider {
+    parse_toml_string_value_in_section(&content, &format!("model_providers.{provider}"), "base_url")
+      .or_else(|| parse_toml_string_value(&content, "base_url"))
+  } else {
+    parse_toml_string_value(&content, "base_url")
+  };
+
+  Ok((base_url, model))
+}
+
 fn resolve_effective_snapshot(mut snapshots: Vec<ToolAuthSnapshot>) -> Vec<ToolAuthSnapshot> {
   snapshots.sort_by_key(|x| x.priority);
   let mut marked = false;
@@ -549,20 +592,12 @@ pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>,
         None
       };
 
-      let (base_url, model) = if config_path.exists() {
-        let content = fs::read_to_string(&config_path)?;
-        (
-          parse_toml_string_value(&content, "base_url"),
-          parse_toml_string_value(&content, "model"),
-        )
-      } else {
-        (None, None)
-      };
+      let (base_url, model) = read_codex_config_values(&config_path)?;
 
       Ok(vec![ToolAuthSnapshot {
         tool,
         method: AuthMethodType::AuthJson,
-        source: auth_path.display().to_string(),
+        source: format!("{} + {}", auth_path.display(), config_path.display()),
         api_key,
         base_url,
         model,
@@ -668,6 +703,40 @@ mod tests {
     let config_new = fs::read_to_string(config_path).expect("read new config failed");
     assert!(auth_new.contains("sk-codex-new"));
     assert!(config_new.contains("gpt-5"));
+  }
+
+  #[test]
+  fn detect_codex_reads_model_provider_base_url() {
+    let _guard = env_lock().lock().expect("lock poisoned");
+    let test_home = unique_temp_home();
+    fs::create_dir_all(test_home.join(".codex")).expect("failed to create codex dir");
+    std::env::set_var("HOME", &test_home);
+    std::env::set_var("USERPROFILE", &test_home);
+
+    let auth_path = test_home.join(".codex").join("auth.json");
+    let config_path = test_home.join(".codex").join("config.toml");
+    fs::write(&auth_path, r#"{"OPENAI_API_KEY":"sk-codex-provider"}"#).expect("seed auth failed");
+    fs::write(
+      &config_path,
+      r#"
+model_provider = "aipor"
+model = "gpt-5"
+model_reasoning_effort = "high"
+disable_response_storage = true
+
+[model_providers.aipor]
+name = "aipor"
+base_url = "https://code.aipor.cc"
+wire_api = "responses"
+requires_openai_auth = true
+"#,
+    )
+    .expect("seed config failed");
+
+    let cfg = read_current_tool_config(ToolType::Codex).expect("read codex config failed");
+    assert_eq!(cfg.api_key.as_deref(), Some("sk-codex-provider"));
+    assert_eq!(cfg.model.as_deref(), Some("gpt-5"));
+    assert_eq!(cfg.base_url.as_deref(), Some("https://code.aipor.cc"));
   }
 
   #[test]
