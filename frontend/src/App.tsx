@@ -158,11 +158,24 @@ function App() {
   }, [showArgMenu]);
 
   const onSubmit = async () => {
+    const normalizedApiKey = draft.apiKey.trim();
+    const allKeys = await listKeys();
+    const duplicate = allKeys.find((item) => item.apiKey.trim() === normalizedApiKey && item.id !== draft.id);
+    if (duplicate) {
+      await message(t.duplicateApiKey, {
+        title: t.addKey,
+        kind: "warning"
+      });
+      setLog(t.duplicateApiKey);
+      return;
+    }
+
     const now = new Date().toISOString();
     const autoName = `${selectedTool}-${now.slice(0, 19).replace("T", " ")}`;
     const payload: KeyRecord = {
       ...draft,
       tool: selectedTool,
+      apiKey: normalizedApiKey,
       id: draft.id || crypto.randomUUID(),
       name: draft.name || autoName,
       createdAt: draft.createdAt || now,
@@ -443,6 +456,7 @@ function App() {
                   <div>{t.apiKey}: {key.apiKey}</div>
                   <div>{t.baseUrl}: {key.baseUrl || "-"}</div>
                   {key.model ? <div>{t.model}: {key.model}</div> : null}
+                  {!key.isActive ? <div>{t.remark}: {key.note || "-"}</div> : null}
                 </div>
                 <div className="key-item-actions">
                   <button onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}>

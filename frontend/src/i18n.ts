@@ -42,6 +42,7 @@ type Dict = {
   log: string;
   savedKey: string;
   deletedKey: string;
+  duplicateApiKey: string;
   restartRecommended: string;
   restartedTool: string;
   traySwitched: string;
@@ -97,6 +98,7 @@ export const dictionaries: Record<Locale, Dict> = {
     log: "日志",
     savedKey: "已保存 Key",
     deletedKey: "已删除 Key",
+    duplicateApiKey: "API Key 已存在，不允许重复添加",
     restartRecommended: "检测到工具正在运行，建议重启",
     restartedTool: "已执行重启指令",
     traySwitched: "托盘已切换 Key"
@@ -151,6 +153,7 @@ export const dictionaries: Record<Locale, Dict> = {
     log: "Log",
     savedKey: "Saved key",
     deletedKey: "Deleted key",
+    duplicateApiKey: "API key already exists. Duplicate keys are not allowed",
     restartRecommended: "Tool is running, restart is recommended",
     restartedTool: "Restart command has been executed",
     traySwitched: "Key switched from tray",
