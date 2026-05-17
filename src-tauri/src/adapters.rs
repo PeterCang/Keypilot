@@ -68,23 +68,50 @@ fn persist_user_env_var(key: &str, value: Option<&str>) -> Result<(), AppError> 
 }
 
 #[cfg(target_os = "windows")]
-fn read_user_env_var(key: &str) -> Result<Option<String>, AppError> {
+fn read_registry_env_var(scope_key: &str, key: &str) -> Result<Option<String>, AppError> {
   let output = Command::new("reg")
-    .args(["query", "HKCU\\Environment", "/v", key])
+    .args(["query", scope_key, "/v", key])
     .output()?;
   if !output.status.success() {
     return Ok(None);
   }
   let stdout = String::from_utf8_lossy(&output.stdout);
   for line in stdout.lines() {
-    if line.contains("REG_") && line.contains(key) {
-      let parts: Vec<&str> = line.split_whitespace().collect();
-      if let Some(value) = parts.last() {
-        return Ok(Some((*value).to_string()));
+    let trimmed = line.trim();
+    if trimmed.starts_with(key) && trimmed.contains("REG_") {
+      if let Some(reg_index) = trimmed.find("REG_") {
+        let rest = trimmed[(reg_index + 4)..].trim_start();
+        if let Some(space_index) = rest.find(char::is_whitespace) {
+          let value = rest[(space_index + 1)..].trim();
+          if !value.is_empty() {
+            return Ok(Some(value.to_string()));
+          }
+        }
       }
     }
   }
   Ok(None)
+}
+
+#[cfg(target_os = "windows")]
+fn read_user_env_var(key: &str) -> Result<Option<String>, AppError> {
+  read_registry_env_var("HKCU\\Environment", key)
+}
+
+#[cfg(target_os = "windows")]
+fn read_effective_env_var(key: &str) -> Result<Option<String>, AppError> {
+  if let Ok(v) = std::env::var(key) {
+    if !v.trim().is_empty() {
+      return Ok(Some(v));
+    }
+  }
+  if let Some(v) = read_registry_env_var("HKCU\\Environment", key)? {
+    return Ok(Some(v));
+  }
+  read_registry_env_var(
+    "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+    key,
+  )
 }
 
 #[cfg(target_os = "macos")]
@@ -110,6 +137,11 @@ fn read_user_env_var(key: &str) -> Result<Option<String>, AppError> {
   }
 }
 
+#[cfg(target_os = "macos")]
+fn read_effective_env_var(key: &str) -> Result<Option<String>, AppError> {
+  read_user_env_var(key)
+}
+
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn persist_user_env_var(_key: &str, _value: Option<&str>) -> Result<(), AppError> {
   Err(AppError::InvalidState(
@@ -119,6 +151,11 @@ fn persist_user_env_var(_key: &str, _value: Option<&str>) -> Result<(), AppError
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn read_user_env_var(_key: &str) -> Result<Option<String>, AppError> {
+  Ok(None)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn read_effective_env_var(_key: &str) -> Result<Option<String>, AppError> {
   Ok(None)
 }
 
@@ -321,16 +358,17 @@ pub fn read_current_tool_config(tool: ToolType) -> Result<ToolCurrentConfig, App
   match tool {
     ToolType::ClaudeCode => Ok(ToolCurrentConfig {
       tool,
-      api_key: read_user_env_var("ANTHROPIC_AUTH_TOKEN")?,
-      base_url: read_user_env_var("ANTHROPIC_BASE_URL")?,
+      api_key: read_effective_env_var("ANTHROPIC_AUTH_TOKEN")?
+        .or(read_effective_env_var("ANTHROPIC_API_KEY")?),
+      base_url: read_effective_env_var("ANTHROPIC_BASE_URL")?,
       model: None,
       source: "env".to_string(),
     }),
     ToolType::GeminiCli => Ok(ToolCurrentConfig {
       tool,
-      api_key: read_user_env_var("GEMINI_API_KEY")?,
-      base_url: read_user_env_var("GOOGLE_GEMINI_BASE_URL")?,
-      model: read_user_env_var("GEMINI_MODEL")?,
+      api_key: read_effective_env_var("GEMINI_API_KEY")?,
+      base_url: read_effective_env_var("GOOGLE_GEMINI_BASE_URL")?,
+      model: read_effective_env_var("GEMINI_MODEL")?,
       source: "env".to_string(),
     }),
     ToolType::Codex | ToolType::CodexApp => {
