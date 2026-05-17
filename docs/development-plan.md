@@ -52,6 +52,65 @@
 - `22ef4fa`：前端国际化落地，新增语言切换与双语文案资源。
 - `a3f94fa`：新增后端关键单测（storage/adapters）。
 - `e223918`：`install_tool` 从占位升级为可执行安装链路。
+- `9fe8483`：Key List 在工具切换时按当前工具重载。
+- `5639429`：Key List 增加“当前工具配置”展示（来源 + 配置值）。
+- `dcf021b`：修复环境变量读取范围（进程 + HKCU + HKLM）并兼容 Claude 变量名。
+- `2524768`：调整 `Current Tool Config` 展示顺序并显示完整 API Key。
+- `f40f0af`：引入多认证方式模型与 `detect_tool_auth` 探测接口（架构基线）。
+
+## 认证 Provider 架构（新增，2026-05-17）
+### 目标
+- 支持“一个工具多种认证方式”，避免在 `switch_key` / `get_tool_current_config` 中写死路径与变量名。
+- 新增工具或新增认证方式时，仅新增适配实现，不改核心编排流程。
+- 为 UI 提供“多来源可观测性”：不仅给出当前生效配置，还给出各来源快照与优先级。
+
+### 分层设计
+- `ToolAdapter`（工具级）：定义工具支持的认证方式、写入默认策略、优先级顺序。
+- `AuthProvider`（认证方式级）：每种方式独立实现 `detect / apply / verify / backup / restore`。
+- `SwitchOrchestrator`（编排级）：统一执行“备份 -> 写入 -> 校验 -> 失败回滚 -> 日志”。
+
+### 已落地的数据模型
+- Rust: `src-tauri/src/models.rs`
+  - `AuthMethodType`
+  - `ToolAuthSnapshot`
+- 前端: `frontend/src/types.ts`
+  - `AuthMethodType`
+  - `ToolAuthSnapshot`
+
+### 已落地的后端接口
+- `get_tool_current_config(tool) -> ToolCurrentConfig`
+  - 通过快照解析有效配置返回（兼容现有 UI）。
+- `detect_tool_auth(tool) -> ToolAuthSnapshot[]`
+  - 返回该工具所有支持来源的探测结果、优先级、可写性、是否生效。
+- 命令注册位置：`src-tauri/src/lib.rs`
+- 核心实现位置：`src-tauri/src/adapters.rs`
+
+### Claude Code 样板（第一版）
+- 支持探测的认证方式：
+  - `env_process`：当前进程环境变量（只读）。
+  - `settings_json`：`~/.claude/settings.json` 的 `env.ANTHROPIC_AUTH_TOKEN / ANTHROPIC_BASE_URL`。
+  - `env_user`：Windows `HKCU\\Environment`（可写）。
+  - `env_machine`：Windows `HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment`（只读）。
+- 当前优先级（小数字优先）：
+  1. `env_process`
+  2. `settings_json`
+  3. `env_user`
+  4. `env_machine`
+- 有效配置解析规则：
+  - 按优先级排序后，首个包含 `apiKey/baseUrl/model` 任一值的快照记为 `isEffective=true`。
+
+### 扩展约定（后续新增工具/方式）
+- 新增工具：
+  - 在 `ToolType` 增加枚举；
+  - 在 `detect_tool_auth_methods(tool)` 中补该工具的 Provider 组合；
+  - 复用统一快照与解析逻辑。
+- 新增认证方式：
+  - 在 `AuthMethodType` 增加类型；
+  - 在适配器中补对应 Provider 的 `detect/apply/verify`；
+  - 将其插入目标工具的优先级列表。
+- 兼容要求：
+  - 不得破坏现有 `switch_key`、`get_tool_current_config` API 契约；
+  - 高风险写入必须保留备份与回滚能力。
 
 ## 下一步实施顺序（新会话起点）
 1. WBS-8：继续扩充失败流/跨平台流集成测试脚手架。
