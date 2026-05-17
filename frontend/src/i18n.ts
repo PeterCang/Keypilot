@@ -36,6 +36,7 @@ type Dict = {
   active: string;
   noBaseUrl: string;
   switchKey: string;
+  switching: string;
   switchAndRestart: string;
   edit: string;
   delete: string;
@@ -93,6 +94,7 @@ export const dictionaries: Record<Locale, Dict> = {
     active: "激活",
     noBaseUrl: "(无 Base URL)",
     switchKey: "切换",
+    switching: "设置中",
     switchAndRestart: "切换并重启",
     edit: "编辑",
     delete: "删除",
@@ -149,6 +151,7 @@ export const dictionaries: Record<Locale, Dict> = {
     active: "active",
     noBaseUrl: "(No Base URL)",
     switchKey: "Switch",
+    switching: "Switching",
     switchAndRestart: "Switch + Restart",
     edit: "Edit",
     delete: "Delete",

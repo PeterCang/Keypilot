@@ -261,6 +261,25 @@ button.danger { background: #b91c1c; }
   box-shadow: 0 10px 30px rgba(2, 6, 23, 0.25);
 }
 
+.busy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(2, 6, 23, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.busy-card {
+  background: #fff;
+  color: #0f172a;
+  border-radius: 10px;
+  padding: 14px 18px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.22);
+  font-weight: 700;
+}
+
 @media (max-width: 640px) {
   .head-row {
     flex-direction: column;

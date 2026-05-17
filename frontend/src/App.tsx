@@ -46,6 +46,7 @@ function App() {
   const [draft, setDraft] = useState<KeyRecord>(emptyDraft);
   const [baseUrlHistory, setBaseUrlHistory] = useState<Partial<Record<ToolType, string[]>>>({});
   const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null);
+  const [switchingKeyId, setSwitchingKeyId] = useState<string | null>(null);
   const [log, setLog] = useState(dictionaries[locale].ready);
 
   const t = dictionaries[locale];
@@ -191,17 +192,22 @@ function App() {
   };
 
   const handleSwitch = async (key: KeyRecord, withRestart: boolean) => {
-    const result = await switchKey(key.id);
-    let nextLog = result.message;
-    if (result.requiresRestart) {
-      nextLog = `${nextLog} | ${t.restartRecommended}`;
-      if (withRestart) {
-        const restartMessage = await restartTool(key.tool);
-        nextLog = `${nextLog} | ${t.restartedTool}: ${restartMessage}`;
+    try {
+      setSwitchingKeyId(key.id);
+      const result = await switchKey(key.id);
+      let nextLog = result.message;
+      if (result.requiresRestart) {
+        nextLog = `${nextLog} | ${t.restartRecommended}`;
+        if (withRestart) {
+          const restartMessage = await restartTool(key.tool);
+          nextLog = `${nextLog} | ${t.restartedTool}: ${restartMessage}`;
+        }
       }
+      setLog(nextLog);
+      await reloadAll(selectedTool);
+    } finally {
+      setSwitchingKeyId(null);
     }
-    setLog(nextLog);
-    await reloadAll(selectedTool);
   };
 
   const selectedToolStatus = useMemo(() => {
@@ -293,6 +299,8 @@ function App() {
     return baseUrlHistory[selectedTool] ?? [];
   }, [baseUrlHistory, selectedTool]);
 
+  const isSwitching = switchingKeyId !== null;
+
   const visibleKeys = useMemo(() => {
     const currentApiKey = currentToolConfig?.apiKey?.trim();
     if (!currentApiKey) return keys;
@@ -330,6 +338,7 @@ function App() {
         <div className="row tool-actions-row">
           {!selectedToolStatus.installed ? (
             <button
+              disabled={isSwitching}
               onClick={async () => {
                 setLog(`${t.installStarted}: ${selectedTool}`);
                 const result = await installTool(selectedTool);
@@ -348,6 +357,7 @@ function App() {
                   <button
                     type="button"
                     className="secondary"
+                    disabled={isSwitching}
                     onClick={async () => {
                       const selected = await open({ directory: true, multiple: false });
                       if (typeof selected === "string") {
@@ -391,6 +401,7 @@ function App() {
                 </div>
               </label>
               <button
+                disabled={isSwitching}
                 onClick={async () => {
                   if (!projectDir.trim()) {
                     await message(t.projectDirRequired, {
@@ -407,6 +418,7 @@ function App() {
               </button>
               <button
                 className="danger"
+                disabled={isSwitching}
                 onClick={async () => {
                   const result = await uninstallTool(selectedTool);
                   setLog(result);
@@ -425,6 +437,7 @@ function App() {
           <h2>{t.keyList}</h2>
           <button
             className="plus-button"
+            disabled={isSwitching}
             onClick={() => {
               setDraft({ ...emptyDraft, tool: selectedTool, baseUrl: "" });
               setShowAddModal(true);
@@ -467,14 +480,14 @@ function App() {
                 </div>
                 <div className="key-item-actions">
                   <button
-                    disabled={deletingKeyId === key.id}
+                    disabled={deletingKeyId === key.id || isSwitching}
                     onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}
                   >
-                    {t.switchKey}
+                    {switchingKeyId === key.id ? `${dictionaries["en-US"].switching}（${dictionaries["zh-CN"].switching}）` : t.switchKey}
                   </button>
                   <button
                     className="danger"
-                    disabled={deletingKeyId === key.id}
+                    disabled={deletingKeyId === key.id || isSwitching}
                     onClick={async () => {
                       try {
                         setDeletingKeyId(key.id);
@@ -531,7 +544,7 @@ function App() {
               </label>
             </div>
             <div className="row">
-              <button onClick={() => onSubmit().catch((err) => setLog(String(err)))}>{t.saveKey}</button>
+              <button disabled={isSwitching} onClick={() => onSubmit().catch((err) => setLog(String(err)))}>{t.saveKey}</button>
             </div>
           </div>
         </div>
@@ -541,6 +554,11 @@ function App() {
         <h2>{t.log}</h2>
         <div className="log">{log}</div>
       </div>
+      {isSwitching ? (
+        <div className="busy-overlay" aria-live="polite">
+          <div className="busy-card">{`${dictionaries["en-US"].switching}（${dictionaries["zh-CN"].switching}）...`}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
