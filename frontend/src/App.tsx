@@ -299,6 +299,11 @@ function App() {
     return baseUrlHistory[selectedTool] ?? [];
   }, [baseUrlHistory, selectedTool]);
 
+  const openEditModal = (key: KeyRecord) => {
+    setDraft(key);
+    setShowAddModal(true);
+  };
+
   const isSwitching = switchingKeyId !== null;
 
   const visibleKeys = useMemo(() => {
@@ -486,6 +491,13 @@ function App() {
                     {switchingKeyId === key.id ? `${dictionaries["en-US"].switching}（${dictionaries["zh-CN"].switching}）` : t.switchKey}
                   </button>
                   <button
+                    className="secondary"
+                    disabled={deletingKeyId === key.id || isSwitching}
+                    onClick={() => openEditModal(key)}
+                  >
+                    {t.edit}
+                  </button>
+                  <button
                     className="danger"
                     disabled={deletingKeyId === key.id || isSwitching}
                     onClick={async () => {
@@ -512,7 +524,7 @@ function App() {
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="panel-head">
-              <h2>{`${t.addKey} · ${toolOptions.find((item) => item.value === selectedTool)?.label ?? selectedTool}`}</h2>
+              <h2>{`${draft.id ? t.editKey : t.addKey} · ${toolOptions.find((item) => item.value === selectedTool)?.label ?? selectedTool}`}</h2>
               <button className="plus-button" onClick={() => setShowAddModal(false)} aria-label="Close">x</button>
             </div>
             <div className="grid add-key-form">
