@@ -23,6 +23,11 @@ const toolConfigGroup = (tool: ToolType) => (tool === "codex-app" ? "codex" : to
 
 const toolsShareConfig = (left: ToolType, right: ToolType) => toolConfigGroup(left) === toolConfigGroup(right);
 
+const formatApiKeyPreview = (apiKey: string) => {
+  if (apiKey.length <= 28) return apiKey;
+  return `${apiKey.slice(0, 16)}...${apiKey.slice(-12)}`;
+};
+
 const emptyDraft: KeyRecord = {
   id: "",
   name: "",
@@ -485,7 +490,7 @@ function App() {
                     <strong>{key.name}</strong>
                     <span className="tag">{key.tool}</span>
                   </div>
-                  <div>{t.apiKey}: {key.apiKey}</div>
+                  <div>{t.apiKey}: {formatApiKeyPreview(key.apiKey)}</div>
                   <div>{t.baseUrl}: {key.baseUrl || "-"}</div>
                   {key.model ? <div>{t.model}: {key.model}</div> : null}
                   <div>{t.remark}: {key.note || "-"}</div>
