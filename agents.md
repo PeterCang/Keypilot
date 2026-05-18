@@ -198,7 +198,8 @@ Tauri commands（统一签名与错误模型）：
 - `backup_config(tool: ToolType) -> BackupResult`
 
 关键类型约束：
-- `ToolType = "claude-code" | "codex" | "gemini-cli"`
+- `ToolType = "claude-code" | "codex" | "codex-app" | "gemini-cli"`
+- `codex` 与 `codex-app` 必须共享同一配置组：两者读写同一套 `~/.codex/config.toml` 与 `~/.codex/auth.json`，在 UI 中选中任一入口时 Key List 必须一致，切换激活态也必须在两者之间同步。
 - `KeyRecord`、`SwitchResult`、`ToolStatus`、`BackupResult` 必须前后端共享定义，或通过生成/镜像机制保持一致。
 
 ## 7. 任务级 WBS 开发计划（MVP）

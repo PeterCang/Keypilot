@@ -31,6 +31,16 @@ fn tool_label(tool: ToolType) -> &'static str {
   }
 }
 
+fn tools_share_config(left: ToolType, right: ToolType) -> bool {
+  matches!(
+    (left, right),
+    (ToolType::Codex, ToolType::Codex)
+      | (ToolType::Codex, ToolType::CodexApp)
+      | (ToolType::CodexApp, ToolType::Codex)
+      | (ToolType::CodexApp, ToolType::CodexApp)
+  ) || left == right
+}
+
 fn build_tray_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu<tauri::Wry>, String> {
   let state = load_state().map_err(|e| e.to_string())?;
   let mut builder = MenuBuilder::new(app).text("open", "Open").separator();
@@ -61,7 +71,7 @@ fn import_current_key_if_missing(state: &mut storage::AppState, tool: ToolType, 
   let exists = state
     .keys
     .iter()
-    .any(|item| item.tool == tool && item.api_key.trim() == api_key);
+    .any(|item| tools_share_config(item.tool, tool) && item.api_key.trim() == api_key);
   if exists {
     return;
   }
@@ -144,7 +154,7 @@ fn switch_key(app: tauri::AppHandle, id: String) -> Result<SwitchResult, String>
   }
 
   for item in &mut state.keys {
-    if item.tool == target.tool {
+    if tools_share_config(item.tool, target.tool) {
       item.is_active = item.id == target.id;
     }
   }
@@ -235,7 +245,7 @@ pub fn run() {
                 import_current_key_if_missing(&mut state, target.tool, &current);
                 if switch_key_for_record_with_source(&target, &current.source).is_ok() {
                   for item in &mut state.keys {
-                    if item.tool == target.tool {
+                    if tools_share_config(item.tool, target.tool) {
                       item.is_active = item.id == target.id;
                     }
                   }

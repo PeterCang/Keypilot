@@ -28,6 +28,7 @@
 - 存储能力：`data.json` 初始化、读写、临时文件写入、备份文件生成
 - 适配器能力：
   - Codex: `~/.codex/auth.json + config.toml` 一致性写入、校验、备份与失败回滚
+  - Codex CLI/App: 共享同一套 `~/.codex/` 配置与同一 Key List，选中 `codex` 或 `codex-app` 时列表和激活态保持一致
   - Claude/Gemini: 系统级环境变量持久化写入与读取校验（含失败回滚）
 - 托盘能力：托盘快捷切换、主窗口状态同步、托盘事件回传
 - CI：GitHub Actions（前端 typecheck/build + Rust check + Windows MSI 打包）

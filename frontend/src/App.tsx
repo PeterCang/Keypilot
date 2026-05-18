@@ -19,6 +19,10 @@ import type { KeyRecord, ToolCurrentConfig, ToolStatus, ToolType } from "./types
 const BASE_URL_HISTORY_STORAGE_KEY = "keypilot.base_url_history";
 const MAX_BASE_URL_HISTORY = 10;
 
+const toolConfigGroup = (tool: ToolType) => (tool === "codex-app" ? "codex" : tool);
+
+const toolsShareConfig = (left: ToolType, right: ToolType) => toolConfigGroup(left) === toolConfigGroup(right);
+
 const emptyDraft: KeyRecord = {
   id: "",
   name: "",
@@ -59,18 +63,19 @@ function App() {
   const saveBaseUrlToHistory = (tool: ToolType, baseUrl?: string) => {
     const normalized = (baseUrl ?? "").trim();
     if (!normalized) return;
-    const previous = baseUrlHistory[tool] ?? [];
+    const historyKey = toolConfigGroup(tool);
+    const previous = baseUrlHistory[historyKey] ?? [];
     const deduped = [normalized, ...previous.filter((item) => item !== normalized)].slice(0, MAX_BASE_URL_HISTORY);
     persistBaseUrlHistory({
       ...baseUrlHistory,
-      [tool]: deduped
+      [historyKey]: deduped
     });
   };
 
   const reloadKeys = async (tool?: ToolType) => {
     const allKeys = await listKeys();
     const targetTool = tool ?? selectedTool;
-    setKeys(allKeys.filter((item) => item.tool === targetTool));
+    setKeys(allKeys.filter((item) => toolsShareConfig(item.tool, targetTool)));
   };
 
   const reloadTools = async () => {
@@ -163,7 +168,7 @@ function App() {
     const normalizedApiKey = draft.apiKey.trim();
     const allKeys = await listKeys();
     const duplicate = allKeys.find(
-      (item) => item.tool === selectedTool && item.apiKey.trim() === normalizedApiKey && item.id !== draft.id
+      (item) => toolsShareConfig(item.tool, selectedTool) && item.apiKey.trim() === normalizedApiKey && item.id !== draft.id
     );
     if (duplicate) {
       await message(t.duplicateApiKey, {
@@ -298,7 +303,7 @@ function App() {
   };
 
   const baseUrlSuggestions = useMemo(() => {
-    return baseUrlHistory[selectedTool] ?? [];
+    return baseUrlHistory[toolConfigGroup(selectedTool)] ?? [];
   }, [baseUrlHistory, selectedTool]);
 
   const openEditModal = (key: KeyRecord) => {
