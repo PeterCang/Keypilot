@@ -162,7 +162,9 @@ function App() {
   const onSubmit = async () => {
     const normalizedApiKey = draft.apiKey.trim();
     const allKeys = await listKeys();
-    const duplicate = allKeys.find((item) => item.apiKey.trim() === normalizedApiKey && item.id !== draft.id);
+    const duplicate = allKeys.find(
+      (item) => item.tool === selectedTool && item.apiKey.trim() === normalizedApiKey && item.id !== draft.id
+    );
     if (duplicate) {
       await message(t.duplicateApiKey, {
         title: t.addKey,
