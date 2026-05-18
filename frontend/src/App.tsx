@@ -475,7 +475,7 @@ function App() {
                 <>
                   <div>{t.currentConfigFromTool}: {currentToolConfig.source}</div>
                   {currentToolConfig.providerName ? <div>{t.remark}: {currentToolConfig.providerName}</div> : null}
-                  <div>{t.apiKey}: {currentToolConfig.apiKey}</div>
+                  <div>{t.apiKey}: {formatApiKeyPreview(currentToolConfig.apiKey)}</div>
                   <div>{t.baseUrl}: {currentToolConfig.baseUrl || "-"}</div>
                   {currentToolConfig.model ? <div>{t.model}: {currentToolConfig.model}</div> : null}
                 </>
