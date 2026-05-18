@@ -13,6 +13,7 @@ Keypilot is a cross-platform desktop tool for managing and switching API keys us
    - `npm install --prefix frontend`
    - `npm run dev --prefix frontend`
 2. Tauri
+   - `cargo tauri dev`
    - `cargo check --manifest-path src-tauri/Cargo.toml`
 3. Windows 打包（MVP）
    - `npm run build --prefix frontend`
