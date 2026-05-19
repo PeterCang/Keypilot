@@ -468,37 +468,39 @@ function App() {
                   <div className="key-field">{t.baseUrl}: {key.baseUrl || "-"}</div>
                   {shouldShowModel(key.tool) ? <div className="key-field">{t.model}: {key.model || "-"}</div> : null}
                 </div>
-                <div className="key-item-actions">
-                  <button
-                    disabled={deletingKeyId === key.id || isSwitching}
-                    onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}
-                  >
-                    {switchingKeyId === key.id ? `${dictionaries["en-US"].switching}（${dictionaries["zh-CN"].switching}）` : t.switchKey}
-                  </button>
-                  <button
-                    className="secondary"
-                    disabled={deletingKeyId === key.id || isSwitching}
-                    onClick={() => openEditModal(key)}
-                  >
-                    {t.edit}
-                  </button>
-                  <button
-                    className="danger"
-                    disabled={deletingKeyId === key.id || isSwitching}
-                    onClick={async () => {
-                      try {
-                        setDeletingKeyId(key.id);
-                        await deleteKey(key.id);
-                        setLog(`${t.deletedKey}: ${key.name}`);
-                        await reloadAll(selectedTool);
-                      } finally {
-                        setDeletingKeyId(null);
-                      }
-                    }}
-                  >
-                    {deletingKeyId === key.id ? `${dictionaries["en-US"].deleting}（${dictionaries["zh-CN"].deleting}）` : t.delete}
-                  </button>
-                </div>
+                {!key.isActive ? (
+                  <div className="key-item-actions">
+                    <button
+                      disabled={deletingKeyId === key.id || isSwitching}
+                      onClick={() => handleSwitch(key, false).catch((err) => setLog(String(err)))}
+                    >
+                      {switchingKeyId === key.id ? `${dictionaries["en-US"].switching}（${dictionaries["zh-CN"].switching}）` : t.switchKey}
+                    </button>
+                    <button
+                      className="secondary"
+                      disabled={deletingKeyId === key.id || isSwitching}
+                      onClick={() => openEditModal(key)}
+                    >
+                      {t.edit}
+                    </button>
+                    <button
+                      className="danger"
+                      disabled={deletingKeyId === key.id || isSwitching}
+                      onClick={async () => {
+                        try {
+                          setDeletingKeyId(key.id);
+                          await deleteKey(key.id);
+                          setLog(`${t.deletedKey}: ${key.name}`);
+                          await reloadAll(selectedTool);
+                        } finally {
+                          setDeletingKeyId(null);
+                        }
+                      }}
+                    >
+                      {deletingKeyId === key.id ? `${dictionaries["en-US"].deleting}（${dictionaries["zh-CN"].deleting}）` : t.delete}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))}
           </>
