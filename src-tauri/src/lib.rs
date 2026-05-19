@@ -64,19 +64,29 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> Result<(), String> {
   tray.set_menu(Some(menu)).map_err(|e| e.to_string())
 }
 
-fn import_current_key_if_missing(state: &mut storage::AppState, tool: ToolType, current: &ToolCurrentConfig) {
+fn import_current_key_if_missing(
+  state: &mut storage::AppState,
+  tool: ToolType,
+  current: &ToolCurrentConfig,
+  is_active: bool,
+) -> bool {
   let Some(api_key) = current.api_key.as_ref().map(|v| v.trim()).filter(|v| !v.is_empty()) else {
-    return;
+    return false;
   };
   let exists = state
     .keys
     .iter()
     .any(|item| tools_share_config(item.tool, tool) && item.api_key.trim() == api_key);
   if exists {
-    return;
+    return false;
   }
 
   let now = Utc::now().to_rfc3339();
+  let provider_name = current
+    .provider_name
+    .clone()
+    .filter(|value| !value.trim().is_empty())
+    .unwrap_or_else(|| current.source.clone());
   state.keys.push(KeyRecord {
     id: Uuid::new_v4().to_string(),
     name: format!("imported-{}-{}", tool_label(tool), &now[0..19].replace('T', " ")),
@@ -84,15 +94,26 @@ fn import_current_key_if_missing(state: &mut storage::AppState, tool: ToolType, 
     api_key: api_key.to_string(),
     base_url: current.base_url.clone(),
     model: current.model.clone(),
-    is_active: false,
+    is_active,
     created_at: now.clone(),
     updated_at: Some(now),
-    note: current
-      .provider_name
-      .clone()
-      .filter(|value| !value.trim().is_empty())
-      .or_else(|| Some(format!("Imported from current config: {}", current.source))),
+    note: Some(provider_name),
   });
+  true
+}
+
+#[tauri::command]
+fn ensure_initial_key_for_tool(app: tauri::AppHandle, tool: ToolType) -> Result<Vec<KeyRecord>, String> {
+  let mut state = load_state().map_err(|e| e.to_string())?;
+  let has_tool_keys = state.keys.iter().any(|item| tools_share_config(item.tool, tool));
+  if !has_tool_keys {
+    let current = read_current_tool_config(tool).map_err(|e| e.to_string())?;
+    if import_current_key_if_missing(&mut state, tool, &current, true) {
+      save_state(&state).map_err(|e| e.to_string())?;
+      let _ = refresh_tray_menu(&app);
+    }
+  }
+  Ok(state.keys)
 }
 
 #[tauri::command]
@@ -138,7 +159,6 @@ fn switch_key(app: tauri::AppHandle, id: String) -> Result<SwitchResult, String>
     .ok_or_else(|| "key not found".to_string())?;
 
   let current = read_current_tool_config(target.tool).map_err(|e| e.to_string())?;
-  import_current_key_if_missing(&mut state, target.tool, &current);
 
   let mut result =
     switch_key_for_record_with_source(&target, &current.source).map_err(|e| e.to_string())?;
@@ -242,7 +262,6 @@ pub fn run() {
                   provider_name: None,
                   source: "none".to_string(),
                 });
-                import_current_key_if_missing(&mut state, target.tool, &current);
                 if switch_key_for_record_with_source(&target, &current.source).is_ok() {
                   for item in &mut state.keys {
                     if tools_share_config(item.tool, target.tool) {
@@ -262,6 +281,7 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       list_keys,
+      ensure_initial_key_for_tool,
       save_key,
       delete_key,
       switch_key,

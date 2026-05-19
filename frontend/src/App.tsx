@@ -4,8 +4,8 @@ import { message, open } from "@tauri-apps/plugin-dialog";
 import {
   deleteKey,
   detectTools,
+  ensureInitialKeyForTool,
   installTool,
-  getToolCurrentConfig,
   listKeys,
   restartTool,
   saveKey,
@@ -14,7 +14,7 @@ import {
   uninstallTool
 } from "./api";
 import { dictionaries, resolveLocale, type Locale } from "./i18n";
-import type { KeyRecord, ToolCurrentConfig, ToolStatus, ToolType } from "./types";
+import type { KeyRecord, ToolStatus, ToolType } from "./types";
 
 const BASE_URL_HISTORY_STORAGE_KEY = "keypilot.base_url_history";
 const MAX_BASE_URL_HISTORY = 10;
@@ -27,6 +27,8 @@ const formatApiKeyPreview = (apiKey: string) => {
   if (apiKey.length <= 28) return apiKey;
   return `${apiKey.slice(0, 16)}...${apiKey.slice(-12)}`;
 };
+
+const shouldShowModel = (tool: ToolType) => toolConfigGroup(tool) === "codex";
 
 const emptyDraft: KeyRecord = {
   id: "",
@@ -46,7 +48,6 @@ function App() {
   const [tools, setTools] = useState<ToolStatus[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTool, setSelectedTool] = useState<ToolType>("claude-code");
-  const [currentToolConfig, setCurrentToolConfig] = useState<ToolCurrentConfig | null>(null);
   const [isKeyListLoading, setIsKeyListLoading] = useState(false);
   const [projectDir, setProjectDir] = useState("");
   const [launchArgs, setLaunchArgs] = useState("");
@@ -78,8 +79,8 @@ function App() {
   };
 
   const reloadKeys = async (tool?: ToolType) => {
-    const allKeys = await listKeys();
     const targetTool = tool ?? selectedTool;
+    const allKeys = await ensureInitialKeyForTool(targetTool);
     setKeys(allKeys.filter((item) => toolsShareConfig(item.tool, targetTool)));
   };
 
@@ -88,14 +89,8 @@ function App() {
     setTools(tStatus);
   };
 
-  const reloadCurrentToolConfig = async (tool?: ToolType) => {
-    const targetTool = tool ?? selectedTool;
-    const config = await getToolCurrentConfig(targetTool);
-    setCurrentToolConfig(config);
-  };
-
   const reloadAll = async (tool?: ToolType) => {
-    await Promise.all([reloadKeys(tool), reloadTools(), reloadCurrentToolConfig(tool)]);
+    await Promise.all([reloadKeys(tool), reloadTools()]);
   };
 
   useEffect(() => {
@@ -318,12 +313,6 @@ function App() {
 
   const isSwitching = switchingKeyId !== null;
 
-  const visibleKeys = useMemo(() => {
-    const currentApiKey = currentToolConfig?.apiKey?.trim();
-    if (!currentApiKey) return keys;
-    return keys.filter((key) => key.apiKey.trim() !== currentApiKey);
-  }, [keys, currentToolConfig]);
-
   return (
     <div className="app">
       <div className="row head-row">
@@ -466,34 +455,18 @@ function App() {
         </div>
         {isKeyListLoading ? <div className="list-item">{t.loading}</div> : (
           <>
-            <div className="list-item">
-              <div className="row">
-                <strong>{t.currentConfig}</strong>
-                <span className="tag">{selectedTool}</span>
-              </div>
-              {currentToolConfig?.apiKey ? (
-                <>
-                  <div>{t.currentConfigFromTool}: {currentToolConfig.source}</div>
-                  {currentToolConfig.providerName ? <div>{t.remark}: {currentToolConfig.providerName}</div> : null}
-                  <div>{t.apiKey}: {formatApiKeyPreview(currentToolConfig.apiKey)}</div>
-                  <div>{t.baseUrl}: {currentToolConfig.baseUrl || "-"}</div>
-                  {currentToolConfig.model ? <div>{t.model}: {currentToolConfig.model}</div> : null}
-                </>
-              ) : (
-                <div>{t.currentConfigNotSet}</div>
-              )}
-            </div>
-            {visibleKeys.map((key) => (
+            {keys.length === 0 ? <div className="list-item muted">{t.noKeys}</div> : null}
+            {keys.map((key) => (
               <div key={key.id} className="list-item key-item">
                 <div className="key-item-main">
-                  <div className="row">
-                    <strong>{key.name}</strong>
+                  <div className="row key-title-row">
+                    <strong>{t.remark}: {key.note || "-"}</strong>
                     <span className="tag">{key.tool}</span>
+                    {key.isActive ? <span className="tag active-tag">{t.activeKey}</span> : null}
                   </div>
-                  <div>{t.apiKey}: {formatApiKeyPreview(key.apiKey)}</div>
-                  <div>{t.baseUrl}: {key.baseUrl || "-"}</div>
-                  {key.model ? <div>{t.model}: {key.model}</div> : null}
-                  <div>{t.remark}: {key.note || "-"}</div>
+                  <div className="key-field">{t.apiKey}: {formatApiKeyPreview(key.apiKey)}</div>
+                  <div className="key-field">{t.baseUrl}: {key.baseUrl || "-"}</div>
+                  {shouldShowModel(key.tool) ? <div className="key-field">{t.model}: {key.model || "-"}</div> : null}
                 </div>
                 <div className="key-item-actions">
                   <button

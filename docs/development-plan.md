@@ -18,6 +18,7 @@
 - 后端骨架：`src-tauri/`（Tauri + Rust）
 - 命令接口已实现：
   - `list_keys`
+  - `ensure_initial_key_for_tool`
   - `save_key`
   - `delete_key`
   - `switch_key`
@@ -33,6 +34,7 @@
 - 托盘能力：托盘快捷切换、主窗口状态同步、托盘事件回传
 - CI：GitHub Actions（前端 typecheck/build + Rust check + Windows MSI 打包）
 - 国际化：前端 UI 支持 `zh-CN` 与 `en-US` 两种语言切换
+- Key List：选中工具若无本地 Key 记录，会读取当前工具配置并自动导入为 active Key，写入 `data.json`
 - 单元测试：
   - `storage` 读写回环测试
   - `adapters` 的 Codex 切换写入/备份测试
@@ -58,6 +60,7 @@
 - `dcf021b`：修复环境变量读取范围（进程 + HKCU + HKLM）并兼容 Claude 变量名。
 - `2524768`：调整 `Current Tool Config` 展示顺序并显示完整 API Key。
 - `f40f0af`：引入多认证方式模型与 `detect_tool_auth` 探测接口（架构基线）。
+- 待提交：Key List 移除 `Current Tool Config` 特殊展示，改为自动导入当前工具配置并显示 active 状态。
 
 ## 认证 Provider 架构（新增，2026-05-17）
 ### 目标

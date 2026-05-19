@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { BackupResult, KeyRecord, SwitchResult, ToolAuthSnapshot, ToolCurrentConfig, ToolStatus } from "./types";
 
 export const listKeys = () => invoke<KeyRecord[]>("list_keys");
+export const ensureInitialKeyForTool = (tool: KeyRecord["tool"]) =>
+  invoke<KeyRecord[]>("ensure_initial_key_for_tool", { tool });
 export const saveKey = (payload: KeyRecord) => invoke<KeyRecord>("save_key", { payload });
 export const deleteKey = (id: string) => invoke<boolean>("delete_key", { id });
 export const switchKey = (id: string) => invoke<SwitchResult>("switch_key", { id });

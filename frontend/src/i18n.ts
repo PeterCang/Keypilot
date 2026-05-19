@@ -54,6 +54,7 @@ type Dict = {
   currentConfig: string;
   currentConfigFromTool: string;
   currentConfigNotSet: string;
+  noKeys: string;
   loading: string;
 };
 
@@ -113,6 +114,7 @@ export const dictionaries: Record<Locale, Dict> = {
     currentConfig: "当前工具配置",
     currentConfigFromTool: "读取来源",
     currentConfigNotSet: "当前工具未读取到 API Key",
+    noKeys: "当前工具未读取到可导入的 API Key，请手动新增 Key",
     loading: "加载中..."
   },
   "en-US": {
@@ -169,6 +171,7 @@ export const dictionaries: Record<Locale, Dict> = {
     currentConfig: "Current Tool Config",
     currentConfigFromTool: "Source",
     currentConfigNotSet: "No API key detected from current tool config",
+    noKeys: "No importable API key was detected for this tool. Add a key manually",
     loading: "Loading..."
   }
 };

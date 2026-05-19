@@ -80,6 +80,10 @@ button.danger { background: #b91c1c; }
 .locale-picker { min-width: 140px; font-weight: 600; }
 .locale-picker select { margin-top: 4px; }
 .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #ecfeff; color: #155e75; }
+.active-tag { background: #b91c1c; color: #fff; }
+.key-title-row { align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.key-field { margin-top: 4px; overflow-wrap: anywhere; }
+.muted { color: #64748b; background: #f8fafc; }
 .log { white-space: pre-wrap; background: #0b1020; color: #d1fae5; padding: 10px; border-radius: 8px; min-height: 64px; }
 
 .tool-manager-inline {
