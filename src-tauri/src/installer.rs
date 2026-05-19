@@ -4,25 +4,38 @@ use crate::process::detect_tool;
 use shlex;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
+use std::thread;
 use tauri::AppHandle;
 use tauri::Emitter;
 
+const GEMINI_MIN_NODE_MAJOR: u32 = 20;
+
 fn install_plan(tool: ToolType) -> Option<(&'static str, &'static [&'static str])> {
   match tool {
-    ToolType::Codex => Some(("npm", &["install", "-g", "@openai/codex"])),
-    ToolType::CodexApp => Some(("npm", &["install", "-g", "@openai/codex"])),
-    ToolType::ClaudeCode => Some(("npm", &["install", "-g", "@anthropic-ai/claude-code"])),
-    ToolType::GeminiCli => Some(("npm", &["install", "-g", "@google/gemini-cli"])),
+    ToolType::Codex => Some((npm_command(), &["install", "-g", "@openai/codex"])),
+    ToolType::CodexApp => Some((npm_command(), &["install", "-g", "@openai/codex"])),
+    ToolType::ClaudeCode => Some((npm_command(), &["install", "-g", "@anthropic-ai/claude-code"])),
+    ToolType::GeminiCli => Some((npm_command(), &["install", "-g", "@google/gemini-cli"])),
   }
 }
 
 fn uninstall_plan(tool: ToolType) -> (&'static str, &'static [&'static str]) {
   match tool {
-    ToolType::Codex => ("npm", &["uninstall", "-g", "@openai/codex"]),
-    ToolType::CodexApp => ("npm", &["uninstall", "-g", "@openai/codex"]),
-    ToolType::ClaudeCode => ("npm", &["uninstall", "-g", "@anthropic-ai/claude-code"]),
-    ToolType::GeminiCli => ("npm", &["uninstall", "-g", "@google/gemini-cli"]),
+    ToolType::Codex => (npm_command(), &["uninstall", "-g", "@openai/codex"]),
+    ToolType::CodexApp => (npm_command(), &["uninstall", "-g", "@openai/codex"]),
+    ToolType::ClaudeCode => (npm_command(), &["uninstall", "-g", "@anthropic-ai/claude-code"]),
+    ToolType::GeminiCli => (npm_command(), &["uninstall", "-g", "@google/gemini-cli"]),
   }
+}
+
+#[cfg(target_os = "windows")]
+fn npm_command() -> &'static str {
+  "npm.cmd"
+}
+
+#[cfg(not(target_os = "windows"))]
+fn npm_command() -> &'static str {
+  "npm"
 }
 
 fn bin_name(tool: ToolType) -> &'static str {
@@ -36,6 +49,102 @@ fn bin_name(tool: ToolType) -> &'static str {
 
 fn emit_log(app: &AppHandle, line: impl Into<String>) {
   let _ = app.emit("install-log", line.into());
+}
+
+fn command_output(command: &str, args: &[&str]) -> Result<String, AppError> {
+  let output = Command::new(command).args(args).output()?;
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let suffix = if stderr.is_empty() { String::new() } else { format!(": {stderr}") };
+    return Err(AppError::InvalidState(format!(
+      "{} {} failed{}",
+      command,
+      args.join(" "),
+      suffix
+    )));
+  }
+  Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn parse_node_major(version: &str) -> Option<u32> {
+  version.trim().trim_start_matches('v').split('.').next()?.parse::<u32>().ok()
+}
+
+fn ensure_gemini_prerequisites(app: &AppHandle) -> Result<(), AppError> {
+  emit_log(app, "checking Node.js version");
+  let node_version = command_output("node", &["--version"]).map_err(|e| {
+    AppError::InvalidState(format!(
+      "Gemini CLI requires Node.js {GEMINI_MIN_NODE_MAJOR}+ and npm. Node.js check failed: {e}"
+    ))
+  })?;
+  let major = parse_node_major(&node_version).ok_or_else(|| {
+    AppError::InvalidState(format!("unable to parse Node.js version: {node_version}"))
+  })?;
+  emit_log(app, format!("node: {node_version}"));
+  if major < GEMINI_MIN_NODE_MAJOR {
+    return Err(AppError::InvalidState(format!(
+      "Gemini CLI requires Node.js {GEMINI_MIN_NODE_MAJOR}+, current version is {node_version}"
+    )));
+  }
+
+  emit_log(app, "checking npm version");
+  let npm_version = command_output(npm_command(), &["--version"]).map_err(|e| {
+    AppError::InvalidState(format!("Gemini CLI requires npm. npm check failed: {e}"))
+  })?;
+  emit_log(app, format!("npm: {npm_version}"));
+  Ok(())
+}
+
+fn ensure_install_prerequisites(app: &AppHandle, tool: ToolType) -> Result<(), AppError> {
+  match tool {
+    ToolType::GeminiCli => ensure_gemini_prerequisites(app),
+    ToolType::ClaudeCode | ToolType::Codex | ToolType::CodexApp => {
+      let version = command_output(npm_command(), &["--version"])?;
+      emit_log(app, format!("npm: {version}"));
+      Ok(())
+    }
+  }
+}
+
+fn pipe_reader(app: AppHandle, label: &'static str, stream: impl std::io::Read + Send + 'static) -> thread::JoinHandle<()> {
+  thread::spawn(move || {
+    let reader = BufReader::new(stream);
+    for line in reader.lines() {
+      emit_log(&app, format!("{label}: {}", line.unwrap_or_default()));
+    }
+  })
+}
+
+fn run_install_command(app: &AppHandle, command: &str, args: &[&str]) -> Result<(), AppError> {
+  emit_log(app, format!("start: {} {}", command, args.join(" ")));
+  let mut child = Command::new(command)
+    .args(args)
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()?;
+
+  let stdout_handle = child.stdout.take().map(|stdout| pipe_reader(app.clone(), "stdout", stdout));
+  let stderr_handle = child.stderr.take().map(|stderr| pipe_reader(app.clone(), "stderr", stderr));
+  let status = child.wait()?;
+
+  if let Some(handle) = stdout_handle {
+    let _ = handle.join();
+  }
+  if let Some(handle) = stderr_handle {
+    let _ = handle.join();
+  }
+
+  if status.success() {
+    emit_log(app, "install command succeeded");
+    Ok(())
+  } else {
+    emit_log(app, format!("install command failed with status: {status}"));
+    Err(AppError::InvalidState(format!(
+      "install failed: {} {}",
+      command,
+      args.join(" ")
+    )))
+  }
 }
 
 pub fn install_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError> {
@@ -57,38 +166,22 @@ pub fn install_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError>
   let Some((command, args)) = install_plan(tool) else {
     return Err(AppError::InvalidState("missing install plan".to_string()));
   };
-  emit_log(app, format!("start: {} {}", command, args.join(" ")));
 
-  let mut child = Command::new(command)
-    .args(args)
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()?;
+  ensure_install_prerequisites(app, tool)?;
+  run_install_command(app, command, args)?;
 
-  if let Some(stdout) = child.stdout.take() {
-    let reader = BufReader::new(stdout);
-    for line in reader.lines() {
-      emit_log(app, format!("stdout: {}", line.unwrap_or_default()));
-    }
+  let refreshed = detect_tool(tool);
+  if !refreshed.installed {
+    return Err(AppError::InvalidState(format!(
+      "install command completed, but {} was not found on PATH",
+      bin_name(tool)
+    )));
   }
-  if let Some(stderr) = child.stderr.take() {
-    let reader = BufReader::new(stderr);
-    for line in reader.lines() {
-      emit_log(app, format!("stderr: {}", line.unwrap_or_default()));
-    }
-  }
-  let status = child.wait()?;
-  if status.success() {
-    emit_log(app, "install succeeded");
-    Ok(format!("install succeeded: {} {}", command, args.join(" ")))
-  } else {
-    emit_log(app, "install failed");
-    Err(AppError::InvalidState(format!(
-      "install failed: {} {}",
-      command,
-      args.join(" ")
-    )))
-  }
+
+  let location = refreshed.location.unwrap_or_else(|| "unknown location".to_string());
+  let version = refreshed.version.unwrap_or_else(|| "unknown version".to_string());
+  emit_log(app, format!("install verified: {version} at {location}"));
+  Ok(format!("install succeeded: {version} at {location}"))
 }
 
 pub fn uninstall_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError> {
@@ -182,5 +275,12 @@ mod tests {
   fn gemini_plan_exists() {
     let plan = install_plan(ToolType::GeminiCli);
     assert!(plan.is_some());
+  }
+
+  #[test]
+  fn parses_node_major() {
+    assert_eq!(parse_node_major("v20.11.1"), Some(20));
+    assert_eq!(parse_node_major("22.0.0"), Some(22));
+    assert_eq!(parse_node_major("not-a-version"), None);
   }
 }

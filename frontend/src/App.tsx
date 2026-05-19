@@ -57,6 +57,7 @@ function App() {
   const [baseUrlHistory, setBaseUrlHistory] = useState<Partial<Record<ToolType, string[]>>>({});
   const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null);
   const [switchingKeyId, setSwitchingKeyId] = useState<string | null>(null);
+  const [installingTool, setInstallingTool] = useState<ToolType | null>(null);
   const [log, setLog] = useState(dictionaries[locale].ready);
 
   const t = dictionaries[locale];
@@ -312,6 +313,7 @@ function App() {
   };
 
   const isSwitching = switchingKeyId !== null;
+  const isInstalling = installingTool !== null;
 
   return (
     <div className="app">
@@ -344,15 +346,22 @@ function App() {
         <div className="row tool-actions-row">
           {!selectedToolStatus.installed ? (
             <button
-              disabled={isSwitching}
+              disabled={isSwitching || isInstalling}
               onClick={async () => {
-                setLog(`${t.installStarted}: ${selectedTool}`);
-                const result = await installTool(selectedTool);
-                setLog(result);
-                await reloadAll(selectedTool);
+                try {
+                  setInstallingTool(selectedTool);
+                  setLog(`${t.installStarted}: ${selectedTool}`);
+                  const result = await installTool(selectedTool);
+                  setLog((prev) => `${prev}\n${result}`);
+                  await reloadAll(selectedTool);
+                } catch (err) {
+                  setLog((prev) => `${prev}\n${String(err)}`);
+                } finally {
+                  setInstallingTool(null);
+                }
               }}
             >
-              {t.installTool}
+              {installingTool === selectedTool ? t.installStarted : t.installTool}
             </button>
           ) : (
             <>
