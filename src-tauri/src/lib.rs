@@ -131,15 +131,97 @@ fn import_current_key_if_missing(
   true
 }
 
+fn has_key_for_tool_config_group(state: &storage::AppState, tool: ToolType) -> bool {
+  state.keys.iter().any(|item| tools_share_config(item.tool, tool))
+}
+
+fn ensure_initial_key_for_tool_state(
+  state: &mut storage::AppState,
+  tool: ToolType,
+  current: &ToolCurrentConfig,
+) -> bool {
+  if has_key_for_tool_config_group(state, tool) {
+    return false;
+  }
+
+  import_current_key_if_missing(state, tool, current, true)
+}
+
 #[tauri::command]
 fn ensure_initial_key_for_tool(app: tauri::AppHandle, tool: ToolType) -> Result<Vec<KeyRecord>, String> {
   let mut state = load_state().map_err(|e| e.to_string())?;
-  let current = read_current_tool_config(tool).map_err(|e| e.to_string())?;
-  if import_current_key_if_missing(&mut state, tool, &current, true) {
-    save_state(&state).map_err(|e| e.to_string())?;
-    let _ = refresh_tray_menu(&app);
+  if !has_key_for_tool_config_group(&state, tool) {
+    let current = read_current_tool_config(tool).map_err(|e| e.to_string())?;
+    if ensure_initial_key_for_tool_state(&mut state, tool, &current) {
+      save_state(&state).map_err(|e| e.to_string())?;
+      let _ = refresh_tray_menu(&app);
+    }
   }
   Ok(state.keys)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use storage::AppState;
+
+  fn key_record(id: &str, api_key: &str, is_active: bool) -> KeyRecord {
+    KeyRecord {
+      id: id.to_string(),
+      name: id.to_string(),
+      tool: ToolType::Codex,
+      api_key: api_key.to_string(),
+      base_url: None,
+      model: None,
+      is_active,
+      created_at: "2026-01-01T00:00:00Z".to_string(),
+      updated_at: None,
+      note: None,
+    }
+  }
+
+  #[test]
+  fn ensure_initial_key_does_not_override_existing_active_key() {
+    let mut state = AppState {
+      version: 1,
+      keys: vec![key_record("first", "sk-first", true), key_record("second", "sk-second", false)],
+    };
+    let current = ToolCurrentConfig {
+      tool: ToolType::Codex,
+      api_key: Some("sk-second".to_string()),
+      base_url: None,
+      model: None,
+      provider_name: None,
+      source: "test".to_string(),
+    };
+
+    let changed = ensure_initial_key_for_tool_state(&mut state, ToolType::Codex, &current);
+
+    assert!(!changed);
+    assert!(state.keys[0].is_active);
+    assert!(!state.keys[1].is_active);
+  }
+
+  #[test]
+  fn ensure_initial_key_imports_current_config_when_group_is_empty() {
+    let mut state = AppState::default();
+    let current = ToolCurrentConfig {
+      tool: ToolType::Codex,
+      api_key: Some("sk-current".to_string()),
+      base_url: Some("https://example.test/v1".to_string()),
+      model: Some("gpt-5".to_string()),
+      provider_name: Some("example".to_string()),
+      source: "test".to_string(),
+    };
+
+    let changed = ensure_initial_key_for_tool_state(&mut state, ToolType::CodexApp, &current);
+
+    assert!(changed);
+    assert_eq!(state.keys.len(), 1);
+    assert_eq!(state.keys[0].tool, ToolType::CodexApp);
+    assert_eq!(state.keys[0].api_key, "sk-current");
+    assert!(state.keys[0].is_active);
+  }
 }
 
 #[tauri::command]
