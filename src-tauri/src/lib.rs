@@ -73,20 +73,49 @@ fn import_current_key_if_missing(
   let Some(api_key) = current.api_key.as_ref().map(|v| v.trim()).filter(|v| !v.is_empty()) else {
     return false;
   };
-  let exists = state
-    .keys
-    .iter()
-    .any(|item| tools_share_config(item.tool, tool) && item.api_key.trim() == api_key);
-  if exists {
-    return false;
-  }
-
-  let now = Utc::now().to_rfc3339();
   let provider_name = current
     .provider_name
     .clone()
     .filter(|value| !value.trim().is_empty())
     .unwrap_or_else(|| current.source.clone());
+
+  if let Some(existing_index) = state
+    .keys
+    .iter()
+    .position(|item| tools_share_config(item.tool, tool) && item.api_key.trim() == api_key)
+  {
+    let existing_id = state.keys[existing_index].id.clone();
+    let mut changed = false;
+    if state.keys[existing_index].base_url != current.base_url {
+      state.keys[existing_index].base_url = current.base_url.clone();
+      changed = true;
+    }
+    if state.keys[existing_index].model != current.model {
+      state.keys[existing_index].model = current.model.clone();
+      changed = true;
+    }
+    if state.keys[existing_index].note.as_deref().unwrap_or("").trim().is_empty() {
+      state.keys[existing_index].note = Some(provider_name);
+      changed = true;
+    }
+    if is_active {
+      for item in &mut state.keys {
+        if tools_share_config(item.tool, tool) {
+          let next_active = item.id == existing_id;
+          if item.is_active != next_active {
+            item.is_active = next_active;
+            changed = true;
+          }
+        }
+      }
+    }
+    if changed {
+      state.keys[existing_index].updated_at = Some(Utc::now().to_rfc3339());
+    }
+    return changed;
+  }
+
+  let now = Utc::now().to_rfc3339();
   state.keys.push(KeyRecord {
     id: Uuid::new_v4().to_string(),
     name: format!("imported-{}-{}", tool_label(tool), &now[0..19].replace('T', " ")),
@@ -105,13 +134,10 @@ fn import_current_key_if_missing(
 #[tauri::command]
 fn ensure_initial_key_for_tool(app: tauri::AppHandle, tool: ToolType) -> Result<Vec<KeyRecord>, String> {
   let mut state = load_state().map_err(|e| e.to_string())?;
-  let has_tool_keys = state.keys.iter().any(|item| tools_share_config(item.tool, tool));
-  if !has_tool_keys {
-    let current = read_current_tool_config(tool).map_err(|e| e.to_string())?;
-    if import_current_key_if_missing(&mut state, tool, &current, true) {
-      save_state(&state).map_err(|e| e.to_string())?;
-      let _ = refresh_tray_menu(&app);
-    }
+  let current = read_current_tool_config(tool).map_err(|e| e.to_string())?;
+  if import_current_key_if_missing(&mut state, tool, &current, true) {
+    save_state(&state).map_err(|e| e.to_string())?;
+    let _ = refresh_tray_menu(&app);
   }
   Ok(state.keys)
 }
