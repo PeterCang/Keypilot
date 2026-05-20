@@ -827,7 +827,7 @@ pub fn switch_key_for_record_with_source(
     ToolType::GeminiCli => {
       switch_env_with_rollback(&[
         ("GEMINI_API_KEY", Some(record.api_key.as_str())),
-        ("GOOGLE_GEMINI_BASE_URL", record.base_url.as_deref()),
+        ("GEMINI_BASE_URL", record.base_url.as_deref()),
         ("GEMINI_MODEL", record.model.as_deref()),
       ])?;
       Ok(SwitchResult {
@@ -1057,7 +1057,7 @@ pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>,
     ToolType::GeminiCli => Ok(ToolCurrentConfig {
       tool,
       api_key: read_effective_env_var("GEMINI_API_KEY")?,
-      base_url: read_effective_env_var("GOOGLE_GEMINI_BASE_URL")?,
+      base_url: read_effective_env_var("GEMINI_BASE_URL")?,
       model: read_effective_env_var("GEMINI_MODEL")?,
       provider_name: None,
       source: "env".to_string(),
