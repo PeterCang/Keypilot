@@ -26,6 +26,13 @@ pub struct KeyRecord {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct SyncKeyResult {
+  pub keys: Vec<KeyRecord>,
+  pub effective_snapshot: Option<ToolAuthSnapshot>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SwitchResult {
   pub success: bool,
   pub warning: Option<String>,

@@ -13,6 +13,11 @@ export interface KeyRecord {
   note?: string;
 }
 
+export interface SyncKeyResult {
+  keys: KeyRecord[];
+  effectiveSnapshot?: ToolAuthSnapshot;
+}
+
 export interface SwitchResult {
   success: boolean;
   warning?: string;

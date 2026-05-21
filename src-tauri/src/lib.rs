@@ -9,7 +9,7 @@ use adapters::{
   backup_config_for_tool, detect_tool_auth_methods, read_current_tool_config, switch_key_for_record_with_source,
 };
 use chrono::Utc;
-use models::{BackupResult, KeyRecord, SwitchResult, ToolAuthSnapshot, ToolCurrentConfig, ToolStatus, ToolType};
+use models::{BackupResult, KeyRecord, SwitchResult, SyncKeyResult, ToolAuthSnapshot, ToolCurrentConfig, ToolStatus, ToolType};
 use storage::{load_state, save_state};
 use tauri::Emitter;
 use tauri::Manager;
@@ -158,6 +158,61 @@ fn ensure_initial_key_for_tool(app: tauri::AppHandle, tool: ToolType) -> Result<
     }
   }
   Ok(state.keys)
+}
+
+// Reads the key currently active in the tool config, syncs is_active in data.json to match,
+// and imports the key if it is not yet in the list. Returns the updated key list and the
+// effective auth snapshot so the frontend can show the read source.
+#[tauri::command]
+fn sync_active_key_for_tool(app: tauri::AppHandle, tool: ToolType) -> Result<SyncKeyResult, String> {
+  let snapshots = detect_tool_auth_methods(tool).map_err(|e| e.to_string())?;
+  let effective = snapshots.into_iter().find(|s| s.is_effective);
+
+  let mut state = load_state().map_err(|e| e.to_string())?;
+  let mut changed = false;
+
+  if let Some(ref snap) = effective {
+    if let Some(ref api_key) = snap.api_key {
+      let api_key = api_key.trim();
+      if !api_key.is_empty() {
+        let current = ToolCurrentConfig {
+          tool,
+          api_key: Some(api_key.to_string()),
+          base_url: snap.base_url.clone(),
+          model: snap.model.clone(),
+          provider_name: None,
+          source: snap.source.clone(),
+        };
+        // import_current_key_if_missing marks the matched/new key as active and clears others
+        if import_current_key_if_missing(&mut state, tool, &current, true) {
+          changed = true;
+        }
+      }
+    } else {
+      // Tool has no key set — ensure at least the list is populated on first run
+      if !has_key_for_tool_config_group(&state, tool) {
+        let current = read_current_tool_config(tool).map_err(|e| e.to_string())?;
+        if ensure_initial_key_for_tool_state(&mut state, tool, &current) {
+          changed = true;
+        }
+      }
+    }
+  } else if !has_key_for_tool_config_group(&state, tool) {
+    let current = read_current_tool_config(tool).map_err(|e| e.to_string())?;
+    if ensure_initial_key_for_tool_state(&mut state, tool, &current) {
+      changed = true;
+    }
+  }
+
+  if changed {
+    save_state(&state).map_err(|e| e.to_string())?;
+    let _ = refresh_tray_menu(&app);
+  }
+
+  Ok(SyncKeyResult {
+    keys: state.keys,
+    effective_snapshot: effective,
+  })
 }
 
 #[cfg(test)]
@@ -390,6 +445,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       list_keys,
       ensure_initial_key_for_tool,
+      sync_active_key_for_tool,
       save_key,
       delete_key,
       switch_key,

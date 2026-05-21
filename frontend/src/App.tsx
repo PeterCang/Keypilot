@@ -11,6 +11,7 @@ import {
   saveKey,
   startTool,
   switchKey,
+  syncActiveKeyForTool,
   uninstallTool
 } from "./api";
 import { dictionaries, resolveLocale, type Locale } from "./i18n";
@@ -81,8 +82,19 @@ function App() {
 
   const reloadKeys = async (tool?: ToolType) => {
     const targetTool = tool ?? selectedTool;
-    const allKeys = await ensureInitialKeyForTool(targetTool);
-    setKeys(allKeys.filter((item) => toolsShareConfig(item.tool, targetTool)));
+    const { keys: allKeys, effectiveSnapshot } = await syncActiveKeyForTool(targetTool);
+    const filtered = allKeys.filter((item) => toolsShareConfig(item.tool, targetTool));
+    setKeys(filtered);
+    const active = filtered.find((k) => k.isActive);
+    if (active) {
+      const keyDisplay = effectiveSnapshot?.apiKey
+        ? formatApiKeyPreview(effectiveSnapshot.apiKey)
+        : formatApiKeyPreview(active.apiKey);
+      const sourcePart = effectiveSnapshot ? ` | ${t.currentConfigFromTool}: ${effectiveSnapshot.source}` : "";
+      setLog(`[${targetTool}] ${t.activeKeyLog}: ${active.note || active.name} | ${keyDisplay}${sourcePart}`);
+    } else {
+      setLog(`[${targetTool}] ${t.noActiveKeyLog}`);
+    }
   };
 
   const reloadTools = async () => {

@@ -56,6 +56,8 @@ type Dict = {
   currentConfigNotSet: string;
   noKeys: string;
   loading: string;
+  activeKeyLog: string;
+  noActiveKeyLog: string;
 };
 
 export const dictionaries: Record<Locale, Dict> = {
@@ -115,7 +117,9 @@ export const dictionaries: Record<Locale, Dict> = {
     currentConfigFromTool: "读取来源",
     currentConfigNotSet: "当前工具未读取到 API Key",
     noKeys: "当前工具未读取到可导入的 API Key，请手动新增 Key",
-    loading: "加载中..."
+    loading: "加载中...",
+    activeKeyLog: "当前激活 Key",
+    noActiveKeyLog: "无激活 Key"
   },
   "en-US": {
     appTitle: "Keypilot Console",
@@ -172,7 +176,9 @@ export const dictionaries: Record<Locale, Dict> = {
     currentConfigFromTool: "Source",
     currentConfigNotSet: "No API key detected from current tool config",
     noKeys: "No importable API key was detected for this tool. Add a key manually",
-    loading: "Loading..."
+    loading: "Loading...",
+    activeKeyLog: "Active key",
+    noActiveKeyLog: "No active key"
   }
 };
 
