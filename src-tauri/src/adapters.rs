@@ -691,15 +691,9 @@ fn read_claude_settings_json(home: &PathBuf) -> Result<(Option<String>, Option<S
   let json: serde_json::Value = serde_json::from_str(&content)?;
   let env = json.get("env").and_then(|v| v.as_object());
   let api_key = env
-    .and_then(|m| m.get("ANTHROPIC_AUTH_TOKEN"))
+    .and_then(|m| m.get("ANTHROPIC_API_KEY"))
     .and_then(|v| v.as_str())
-    .map(|v| v.to_string())
-    .or_else(|| {
-      env
-        .and_then(|m| m.get("ANTHROPIC_API_KEY"))
-        .and_then(|v| v.as_str())
-        .map(|v| v.to_string())
-    });
+    .map(|v| v.to_string());
   let base_url = env
     .and_then(|m| m.get("ANTHROPIC_BASE_URL"))
     .and_then(|v| v.as_str())
@@ -744,10 +738,9 @@ fn write_claude_settings_json(record: &KeyRecord) -> Result<(), AppError> {
     .as_object_mut()
     .ok_or_else(|| AppError::InvalidState("invalid claude settings env object".to_string()))?;
   env_obj.insert(
-    "ANTHROPIC_AUTH_TOKEN".to_string(),
+    "ANTHROPIC_API_KEY".to_string(),
     serde_json::Value::String(record.api_key.clone()),
   );
-  env_obj.remove("ANTHROPIC_API_KEY");
   match record.base_url.as_deref() {
     Some(v) if !v.trim().is_empty() => {
       env_obj.insert(
@@ -813,7 +806,7 @@ pub fn switch_key_for_record_with_source(
         write_claude_settings_json(record)?;
       } else {
         switch_env_with_rollback(&[
-          ("ANTHROPIC_AUTH_TOKEN", Some(record.api_key.as_str())),
+          ("ANTHROPIC_API_KEY", Some(record.api_key.as_str())),
           ("ANTHROPIC_BASE_URL", record.base_url.as_deref()),
         ])?;
       }
@@ -952,38 +945,27 @@ pub fn detect_tool_auth_methods(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>,
   let home = user_home()?;
   match tool {
     ToolType::ClaudeCode => {
-      let process_api_key = std::env::var("ANTHROPIC_AUTH_TOKEN")
+      let process_api_key = std::env::var("ANTHROPIC_API_KEY")
         .ok()
-        .filter(|x| !x.trim().is_empty())
-        .or_else(|| {
-          std::env::var("ANTHROPIC_API_KEY")
-            .ok()
-            .filter(|x| !x.trim().is_empty())
-        });
+        .filter(|x| !x.trim().is_empty());
       let process_base_url = std::env::var("ANTHROPIC_BASE_URL")
         .ok()
         .filter(|x| !x.trim().is_empty());
       let (settings_api_key, settings_base_url) = read_claude_settings_json(&home)?;
       #[cfg(target_os = "windows")]
-      let user_api_key = read_registry_env_var("HKCU\\Environment", "ANTHROPIC_AUTH_TOKEN")?.or(
-        read_registry_env_var("HKCU\\Environment", "ANTHROPIC_API_KEY")?,
-      );
+      let user_api_key = read_registry_env_var("HKCU\\Environment", "ANTHROPIC_API_KEY")?;
       #[cfg(target_os = "windows")]
       let user_base_url = read_registry_env_var("HKCU\\Environment", "ANTHROPIC_BASE_URL")?;
       #[cfg(not(target_os = "windows"))]
-      let user_api_key = read_user_env_var("ANTHROPIC_AUTH_TOKEN")?;
+      let user_api_key = read_user_env_var("ANTHROPIC_API_KEY")?;
       #[cfg(not(target_os = "windows"))]
       let user_base_url = read_user_env_var("ANTHROPIC_BASE_URL")?;
 
       #[cfg(target_os = "windows")]
       let machine_api_key = read_registry_env_var(
         "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
-        "ANTHROPIC_AUTH_TOKEN",
-      )?
-      .or(read_registry_env_var(
-        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
         "ANTHROPIC_API_KEY",
-      )?);
+      )?;
       #[cfg(target_os = "windows")]
       let machine_base_url = read_registry_env_var(
         "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
@@ -1356,7 +1338,7 @@ wire_api = "responses"
       &settings_path,
       r#"{
   "env": {
-    "ANTHROPIC_AUTH_TOKEN": "old",
+    "ANTHROPIC_API_KEY": "old",
     "ANTHROPIC_BASE_URL": "https://old.example"
   },
   "permissions": {
@@ -1386,14 +1368,14 @@ wire_api = "responses"
     let backup_path = claude_dir.join("settings.json.bak1");
     assert!(backup_path.exists(), "settings backup should exist");
     let backup = fs::read_to_string(backup_path).expect("read backup failed");
-    assert!(backup.contains("\"ANTHROPIC_AUTH_TOKEN\": \"old\""));
+    assert!(backup.contains("\"ANTHROPIC_API_KEY\": \"old\""));
     assert!(backup.contains("\"permissions\""));
 
     let next: serde_json::Value =
       serde_json::from_str(&fs::read_to_string(settings_path).expect("read settings failed"))
         .expect("parse settings failed");
     assert_eq!(
-      next["env"]["ANTHROPIC_AUTH_TOKEN"].as_str(),
+      next["env"]["ANTHROPIC_API_KEY"].as_str(),
       Some("sk-claude-new")
     );
     assert_eq!(
