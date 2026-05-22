@@ -16,7 +16,9 @@ export const getToolCurrentConfig = (tool: KeyRecord["tool"]) =>
 export const detectToolAuth = (tool: KeyRecord["tool"]) =>
   invoke<ToolAuthSnapshot[]>("detect_tool_auth", { tool });
 export const restartTool = (tool: KeyRecord["tool"]) => invoke<string>("restart_tool", { tool });
-export const installTool = (tool: KeyRecord["tool"]) => invoke<string>("install_tool", { tool });
-export const uninstallTool = (tool: KeyRecord["tool"]) => invoke<string>("uninstall_tool", { tool });
+export const installTool = (tool: KeyRecord["tool"], customCmd?: string) =>
+  invoke<string>("install_tool", { tool, customCmd: customCmd || null });
+export const uninstallTool = (tool: KeyRecord["tool"], customCmd?: string) =>
+  invoke<string>("uninstall_tool", { tool, customCmd: customCmd || null });
 export const startTool = (tool: KeyRecord["tool"], args: string, projectDir?: string) =>
   invoke<string>("start_tool", { tool, args, projectDir });

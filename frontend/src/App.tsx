@@ -59,6 +59,8 @@ function App() {
   const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null);
   const [switchingKeyId, setSwitchingKeyId] = useState<string | null>(null);
   const [installingTool, setInstallingTool] = useState<ToolType | null>(null);
+  const [geminiCustomInstallCmd, setGeminiCustomInstallCmd] = useState("");
+  const [geminiCustomUninstallCmd, setGeminiCustomUninstallCmd] = useState("");
   const [log, setLog] = useState(dictionaries[locale].ready);
 
   const t = dictionaries[locale];
@@ -357,24 +359,39 @@ function App() {
         </div>
         <div className="row tool-actions-row">
           {!selectedToolStatus.installed ? (
-            <button
-              disabled={isSwitching || isInstalling}
-              onClick={async () => {
-                try {
-                  setInstallingTool(selectedTool);
-                  setLog(`${t.installStarted}: ${selectedTool}`);
-                  const result = await installTool(selectedTool);
-                  setLog((prev) => `${prev}\n${result}`);
-                  await reloadAll(selectedTool);
-                } catch (err) {
-                  setLog((prev) => `${prev}\n${String(err)}`);
-                } finally {
-                  setInstallingTool(null);
-                }
-              }}
-            >
-              {installingTool === selectedTool ? t.installStarted : t.installTool}
-            </button>
+            <>
+              {selectedTool === "gemini-cli" && (
+                <label className="launch-args-label">
+                  <span>{t.customInstallCmd}</span>
+                  <input
+                    value={geminiCustomInstallCmd}
+                    onChange={(e) => setGeminiCustomInstallCmd(e.target.value)}
+                    placeholder="e.g. npm install -g @your-provider/gemini-cli"
+                  />
+                </label>
+              )}
+              <button
+                disabled={isSwitching || isInstalling}
+                onClick={async () => {
+                  try {
+                    setInstallingTool(selectedTool);
+                    setLog(`${t.installStarted}: ${selectedTool}`);
+                    const result = await installTool(
+                      selectedTool,
+                      selectedTool === "gemini-cli" ? geminiCustomInstallCmd : undefined
+                    );
+                    setLog((prev) => `${prev}\n${result}`);
+                    await reloadAll(selectedTool);
+                  } catch (err) {
+                    setLog((prev) => `${prev}\n${String(err)}`);
+                  } finally {
+                    setInstallingTool(null);
+                  }
+                }}
+              >
+                {installingTool === selectedTool ? t.installStarted : t.installTool}
+              </button>
+            </>
           ) : (
             <>
               <label className="project-dir-label">
@@ -427,6 +444,16 @@ function App() {
                   </div>
                 </div>
               </label>
+              {selectedTool === "gemini-cli" && (
+                <label className="launch-args-label">
+                  <span>{t.customUninstallCmd}</span>
+                  <input
+                    value={geminiCustomUninstallCmd}
+                    onChange={(e) => setGeminiCustomUninstallCmd(e.target.value)}
+                    placeholder="e.g. npm uninstall -g @your-provider/gemini-cli"
+                  />
+                </label>
+              )}
               <button
                 disabled={isSwitching}
                 onClick={async () => {
@@ -447,7 +474,10 @@ function App() {
                 className="danger"
                 disabled={isSwitching}
                 onClick={async () => {
-                  const result = await uninstallTool(selectedTool);
+                  const result = await uninstallTool(
+                    selectedTool,
+                    selectedTool === "gemini-cli" ? geminiCustomUninstallCmd : undefined
+                  );
                   setLog(result);
                   await reloadAll(selectedTool);
                 }}

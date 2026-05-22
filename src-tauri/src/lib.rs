@@ -373,8 +373,8 @@ fn detect_tool_auth(tool: ToolType) -> Result<Vec<ToolAuthSnapshot>, String> {
 }
 
 #[tauri::command]
-fn install_tool(app: tauri::AppHandle, tool: ToolType) -> Result<String, String> {
-  installer::install_tool(&app, tool).map_err(|e| e.to_string())
+fn install_tool(app: tauri::AppHandle, tool: ToolType, custom_cmd: Option<String>) -> Result<String, String> {
+  installer::install_tool(&app, tool, custom_cmd.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -383,8 +383,8 @@ fn restart_tool(tool: ToolType) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn uninstall_tool(app: tauri::AppHandle, tool: ToolType) -> Result<String, String> {
-  installer::uninstall_tool(&app, tool).map_err(|e| e.to_string())
+fn uninstall_tool(app: tauri::AppHandle, tool: ToolType, custom_cmd: Option<String>) -> Result<String, String> {
+  installer::uninstall_tool(&app, tool, custom_cmd.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

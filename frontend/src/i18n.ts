@@ -58,6 +58,8 @@ type Dict = {
   loading: string;
   activeKeyLog: string;
   noActiveKeyLog: string;
+  customInstallCmd: string;
+  customUninstallCmd: string;
 };
 
 export const dictionaries: Record<Locale, Dict> = {
@@ -119,7 +121,9 @@ export const dictionaries: Record<Locale, Dict> = {
     noKeys: "当前工具未读取到可导入的 API Key，请手动新增 Key",
     loading: "加载中...",
     activeKeyLog: "当前激活 Key",
-    noActiveKeyLog: "无激活 Key"
+    noActiveKeyLog: "无激活 Key",
+    customInstallCmd: "自定义安装命令",
+    customUninstallCmd: "自定义卸载命令"
   },
   "en-US": {
     appTitle: "Keypilot Console",
@@ -178,7 +182,9 @@ export const dictionaries: Record<Locale, Dict> = {
     noKeys: "No importable API key was detected for this tool. Add a key manually",
     loading: "Loading...",
     activeKeyLog: "Active key",
-    noActiveKeyLog: "No active key"
+    noActiveKeyLog: "No active key",
+    customInstallCmd: "Custom Install Command",
+    customUninstallCmd: "Custom Uninstall Command"
   }
 };
 

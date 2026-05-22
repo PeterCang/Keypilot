@@ -163,7 +163,18 @@ fn run_install_command(app: &AppHandle, command: &str, args: &[&str]) -> Result<
   }
 }
 
-pub fn install_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError> {
+fn run_custom_command(app: &AppHandle, cmd_str: &str) -> Result<(), AppError> {
+  let parts = shlex::split(cmd_str)
+    .ok_or_else(|| AppError::InvalidState("failed to parse custom command".to_string()))?;
+  if parts.is_empty() {
+    return Err(AppError::InvalidState("custom command is empty".to_string()));
+  }
+  let (command, args) = parts.split_first().unwrap();
+  let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+  run_install_command(app, command, &args_refs)
+}
+
+pub fn install_tool(app: &AppHandle, tool: ToolType, custom_cmd: Option<&str>) -> Result<String, AppError> {
   let status = detect_tool(tool);
   if status.installed {
     emit_log(
@@ -179,12 +190,17 @@ pub fn install_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError>
     ));
   }
 
-  let Some((command, args)) = install_plan(tool) else {
-    return Err(AppError::InvalidState("missing install plan".to_string()));
-  };
-
-  ensure_install_prerequisites(app, tool)?;
-  run_install_command(app, command, args)?;
+  let trimmed_custom = custom_cmd.map(str::trim).filter(|s| !s.is_empty());
+  if let Some(cmd) = trimmed_custom {
+    emit_log(app, format!("using custom install command: {cmd}"));
+    run_custom_command(app, cmd)?;
+  } else {
+    let Some((command, args)) = install_plan(tool) else {
+      return Err(AppError::InvalidState("missing install plan".to_string()));
+    };
+    ensure_install_prerequisites(app, tool)?;
+    run_install_command(app, command, args)?;
+  }
 
   let refreshed = detect_tool(tool);
   if !refreshed.installed {
@@ -200,10 +216,18 @@ pub fn install_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError>
   Ok(format!("install succeeded: {version} at {location}"))
 }
 
-pub fn uninstall_tool(app: &AppHandle, tool: ToolType) -> Result<String, AppError> {
+pub fn uninstall_tool(app: &AppHandle, tool: ToolType, custom_cmd: Option<&str>) -> Result<String, AppError> {
+  let trimmed_custom = custom_cmd.map(str::trim).filter(|s| !s.is_empty());
+  if let Some(cmd) = trimmed_custom {
+    emit_log(app, format!("using custom uninstall command: {cmd}"));
+    run_custom_command(app, cmd)?;
+    emit_log(app, "uninstall succeeded");
+    return Ok(format!("uninstall succeeded: {cmd}"));
+  }
+
   let (command, args) = uninstall_plan(tool);
   emit_log(app, format!("start: {} {}", command, args.join(" ")));
-  let output = Command::new(command).args(args).output()?;
+  let output = Command::new(command).args(args).no_window().output()?;
   if output.status.success() {
     emit_log(app, "uninstall succeeded");
     Ok(format!("uninstall succeeded: {} {}", command, args.join(" ")))
