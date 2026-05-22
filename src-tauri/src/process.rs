@@ -1,6 +1,21 @@
 use crate::models::{ToolStatus, ToolType};
 use std::process::Command;
 
+trait NoWindow {
+  fn no_window(&mut self) -> &mut Self;
+}
+
+impl NoWindow for Command {
+  fn no_window(&mut self) -> &mut Self {
+    #[cfg(target_os = "windows")]
+    {
+      use std::os::windows::process::CommandExt;
+      self.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    self
+  }
+}
+
 fn tool_bin(tool: ToolType) -> &'static str {
   match tool {
     ToolType::ClaudeCode => "claude",
@@ -15,7 +30,7 @@ pub fn is_tool_running(tool: ToolType) -> bool {
   #[cfg(target_os = "windows")]
   {
     let filter = format!("IMAGENAME eq {name}.exe");
-    if let Ok(output) = Command::new("tasklist").args(["/FI", &filter]).output() {
+    if let Ok(output) = Command::new("tasklist").args(["/FI", &filter]).no_window().output() {
       let text = String::from_utf8_lossy(&output.stdout).to_lowercase();
       return text.contains(&format!("{name}.exe"));
     }
@@ -41,6 +56,7 @@ pub fn restart_tool(tool: ToolType) -> Result<String, String> {
     let image = format!("{name}.exe");
     let status = Command::new("taskkill")
       .args(["/IM", &image, "/F"])
+      .no_window()
       .status()
       .map_err(|e| format!("taskkill failed: {e}"))?;
     if !status.success() {
@@ -145,6 +161,7 @@ if ($pkg -and $pkg.InstallLocation) {
 "#;
   let output = Command::new("powershell")
     .args(["-NoProfile", "-Command", script])
+    .no_window()
     .output()
     .ok()?;
   if !output.status.success() {
@@ -186,6 +203,7 @@ if ($hit) {
 "#;
   let output = Command::new("powershell")
     .args(["-NoProfile", "-Command", script])
+    .no_window()
     .output()
     .ok()?;
   if !output.status.success() {
@@ -256,6 +274,7 @@ fn detect_windows_file_version(exe_path: &str) -> Option<String> {
   let script = format!("(Get-Item -LiteralPath '{}').VersionInfo.ProductVersion", exe_path.replace('\'', "''"));
   let output = Command::new("powershell")
     .args(["-NoProfile", "-Command", &script])
+    .no_window()
     .output()
     .ok()?;
   if !output.status.success() {
@@ -273,6 +292,7 @@ fn detect_windows_file_file_version(exe_path: &str) -> Option<String> {
   let script = format!("(Get-Item -LiteralPath '{}').VersionInfo.FileVersion", exe_path.replace('\'', "''"));
   let output = Command::new("powershell")
     .args(["-NoProfile", "-Command", &script])
+    .no_window()
     .output()
     .ok()?;
   if !output.status.success() {
@@ -337,7 +357,7 @@ fn run_tool_command(bin: &str, args: &[&str]) -> std::io::Result<std::process::O
       cmdline.push(' ');
       cmdline.push_str(arg);
     }
-    Command::new("cmd").args(["/C", &cmdline]).output()
+    Command::new("cmd").args(["/C", &cmdline]).no_window().output()
   }
   #[cfg(not(target_os = "windows"))]
   {
@@ -348,6 +368,7 @@ fn run_tool_command(bin: &str, args: &[&str]) -> std::io::Result<std::process::O
 fn detect_npm_global_pkg_version(pkg: &str) -> Option<String> {
   let output = Command::new("npm")
     .args(["list", "-g", pkg, "--depth=0", "--json"])
+    .no_window()
     .output()
     .ok()?;
 

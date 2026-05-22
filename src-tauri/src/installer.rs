@@ -8,6 +8,21 @@ use std::thread;
 use tauri::AppHandle;
 use tauri::Emitter;
 
+trait NoWindow {
+  fn no_window(&mut self) -> &mut Self;
+}
+
+impl NoWindow for Command {
+  fn no_window(&mut self) -> &mut Self {
+    #[cfg(target_os = "windows")]
+    {
+      use std::os::windows::process::CommandExt;
+      self.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    self
+  }
+}
+
 const GEMINI_MIN_NODE_MAJOR: u32 = 20;
 
 fn install_plan(tool: ToolType) -> Option<(&'static str, &'static [&'static str])> {
@@ -52,7 +67,7 @@ fn emit_log(app: &AppHandle, line: impl Into<String>) {
 }
 
 fn command_output(command: &str, args: &[&str]) -> Result<String, AppError> {
-  let output = Command::new(command).args(args).output()?;
+  let output = Command::new(command).args(args).no_window().output()?;
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let suffix = if stderr.is_empty() { String::new() } else { format!(": {stderr}") };
@@ -121,6 +136,7 @@ fn run_install_command(app: &AppHandle, command: &str, args: &[&str]) -> Result<
     .args(args)
     .stdout(Stdio::piped())
     .stderr(Stdio::piped())
+    .no_window()
     .spawn()?;
 
   let stdout_handle = child.stdout.take().map(|stdout| pipe_reader(app.clone(), "stdout", stdout));

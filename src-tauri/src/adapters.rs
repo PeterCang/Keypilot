@@ -7,6 +7,21 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+trait NoWindow {
+  fn no_window(&mut self) -> &mut Self;
+}
+
+impl NoWindow for Command {
+  fn no_window(&mut self) -> &mut Self {
+    #[cfg(target_os = "windows")]
+    {
+      use std::os::windows::process::CommandExt;
+      self.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    self
+  }
+}
+
 fn user_home() -> Result<PathBuf, AppError> {
   let home = std::env::var("HOME")
     .or_else(|_| std::env::var("USERPROFILE"))
@@ -68,7 +83,7 @@ fn rotate_backups_and_copy_current(source: &PathBuf) -> Result<PathBuf, AppError
 }
 
 fn run_command(program: &str, args: &[&str]) -> Result<(), AppError> {
-  let status = Command::new(program).args(args).status()?;
+  let status = Command::new(program).args(args).no_window().status()?;
   if !status.success() {
     return Err(AppError::InvalidState(format!(
       "command failed: {} {}",
@@ -169,6 +184,7 @@ fn persist_machine_env_var(key: &str, value: Option<&str>) -> Result<(), AppErro
 fn read_registry_env_var(scope_key: &str, key: &str) -> Result<Option<String>, AppError> {
   let output = Command::new("reg")
     .args(["query", scope_key, "/v", key])
+    .no_window()
     .output()?;
   if !output.status.success() {
     return Ok(None);
