@@ -445,7 +445,7 @@ function App() {
                 </div>
               </label>
               {selectedTool === "gemini-cli" && (
-                <label className="launch-args-label">
+                <label className="project-dir-label">
                   <span>{t.customUninstallCmd}</span>
                   <input
                     value={geminiCustomUninstallCmd}
