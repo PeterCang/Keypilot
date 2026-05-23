@@ -164,14 +164,24 @@ fn run_install_command(app: &AppHandle, command: &str, args: &[&str]) -> Result<
 }
 
 fn run_custom_command(app: &AppHandle, cmd_str: &str) -> Result<(), AppError> {
-  let parts = shlex::split(cmd_str)
-    .ok_or_else(|| AppError::InvalidState("failed to parse custom command".to_string()))?;
-  if parts.is_empty() {
+  if cmd_str.trim().is_empty() {
     return Err(AppError::InvalidState("custom command is empty".to_string()));
   }
-  let (command, args) = parts.split_first().unwrap();
-  let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-  run_install_command(app, command, &args_refs)
+  #[cfg(target_os = "windows")]
+  {
+    run_install_command(app, "cmd", &["/C", cmd_str])
+  }
+  #[cfg(not(target_os = "windows"))]
+  {
+    let parts = shlex::split(cmd_str)
+      .ok_or_else(|| AppError::InvalidState("failed to parse custom command".to_string()))?;
+    if parts.is_empty() {
+      return Err(AppError::InvalidState("custom command is empty".to_string()));
+    }
+    let (command, args) = parts.split_first().unwrap();
+    let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_install_command(app, command, &args_refs)
+  }
 }
 
 pub fn install_tool(app: &AppHandle, tool: ToolType, custom_cmd: Option<&str>) -> Result<String, AppError> {
