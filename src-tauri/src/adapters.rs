@@ -821,9 +821,10 @@ pub fn switch_key_for_record_with_source(
       if source.ends_with(".claude\\settings.json") || source.ends_with(".claude/settings.json") {
         write_claude_settings_json(record)?;
       } else {
+        let base_url = record.base_url.as_deref().filter(|s| !s.is_empty());
         switch_env_with_rollback(&[
           ("ANTHROPIC_API_KEY", Some(record.api_key.as_str())),
-          ("ANTHROPIC_BASE_URL", record.base_url.as_deref()),
+          ("ANTHROPIC_BASE_URL", base_url),
         ])?;
       }
       Ok(SwitchResult {
@@ -834,10 +835,12 @@ pub fn switch_key_for_record_with_source(
       })
     }
     ToolType::GeminiCli => {
+      let base_url = record.base_url.as_deref().filter(|s| !s.is_empty());
+      let model = record.model.as_deref().filter(|s| !s.is_empty());
       switch_env_with_rollback(&[
         ("GEMINI_API_KEY", Some(record.api_key.as_str())),
-        ("GEMINI_BASE_URL", record.base_url.as_deref()),
-        ("GEMINI_MODEL", record.model.as_deref()),
+        ("GEMINI_BASE_URL", base_url),
+        ("GEMINI_MODEL", model),
       ])?;
       Ok(SwitchResult {
         success: true,
